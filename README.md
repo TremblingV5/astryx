@@ -37,19 +37,19 @@ It ships 150+ accessible components, brand-level theming, dark mode, ready-to-sh
 
 ## Getting Started
 
-Install Astryx and a theme:
+Install Astryx, a theme, and its peer dependencies:
 
 ```bash
 # npm
-npm install @astryxdesign/core @astryxdesign/theme-neutral
+npm install @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 npm install -D @astryxdesign/cli
 
 # pnpm
-pnpm add @astryxdesign/core @astryxdesign/theme-neutral
+pnpm add @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 pnpm add -D @astryxdesign/cli
 
 # yarn
-yarn add @astryxdesign/core @astryxdesign/theme-neutral
+yarn add @astryxdesign/core @astryxdesign/theme-neutral @stylexjs/stylex
 yarn add -D @astryxdesign/cli
 ```
 
