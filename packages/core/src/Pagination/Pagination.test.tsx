@@ -518,6 +518,211 @@ describe('Pagination', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Variant: input
+  // ---------------------------------------------------------------------------
+
+  describe('variant: input', () => {
+    it('renders an editable box between the arrows with no "of Y" label', () => {
+      render(
+        <Pagination
+          page={3}
+          onChange={() => {}}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      expect(box).toBeInTheDocument();
+      expect(box).toHaveValue('3');
+      // No separator / "of Y" text and no page-number buttons.
+      expect(screen.queryByText(/of/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', {name: /Go to page \d/}),
+      ).not.toBeInTheDocument();
+      // Still flanked by prev/next.
+      expect(
+        screen.getByRole('button', {name: 'Go to previous page'}),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {name: 'Go to next page'}),
+      ).toBeInTheDocument();
+    });
+
+    it('commits a typed page on Enter and clamps to totalPages', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          onChange={onChange}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      await user.clear(box);
+      await user.type(box, '4{Enter}');
+      expect(onChange).toHaveBeenCalledWith(4);
+
+      onChange.mockClear();
+      await user.clear(box);
+      // Over the max (10 pages) clamps down to the last page.
+      await user.type(box, '99{Enter}');
+      expect(onChange).toHaveBeenCalledWith(10);
+    });
+
+    it('commits on blur', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          onChange={onChange}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      await user.clear(box);
+      await user.type(box, '5');
+      await user.tab();
+      expect(onChange).toHaveBeenCalledWith(5);
+    });
+
+    it('reverts to the current page on an invalid or empty entry', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={3}
+          onChange={onChange}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      await user.clear(box);
+      await user.type(box, 'abc{Enter}');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(box).toHaveValue('3');
+
+      await user.clear(box);
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(box).toHaveValue('3');
+    });
+
+    it('announces the committed page to screen readers', async () => {
+      const user = userEvent.setup();
+      render(
+        <Pagination
+          page={1}
+          onChange={() => {}}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      await user.clear(box);
+      await user.type(box, '4{Enter}');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Page 4 of 10');
+      });
+    });
+
+    it('is disabled and does not commit when isDisabled', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={2}
+          onChange={onChange}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+          isDisabled
+        />,
+      );
+      const box = screen.getByRole('textbox', {name: 'Go to page'});
+      expect(box).toBeDisabled();
+      // Prev/next are disabled at nothing special here, but disabled input
+      // never fires a change.
+      await user.type(box, '5{Enter}');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    describe('navigateBy="row"', () => {
+      it('shows the first row of the current page', () => {
+        render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+            navigateBy="row"
+          />,
+        );
+        // Page 3, pageSize 10 → first row is 21.
+        expect(screen.getByRole('textbox', {name: 'Go to page'})).toHaveValue(
+          '21',
+        );
+      });
+
+      it('navigates to the page containing the committed row', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const onRowNavigate = vi.fn();
+        render(
+          <Pagination
+            page={1}
+            onChange={onChange}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+            navigateBy="row"
+            onRowNavigate={onRowNavigate}
+          />,
+        );
+        const box = screen.getByRole('textbox', {name: 'Go to page'});
+        await user.clear(box);
+        // Row 25 → page 3 (ceil(25/10)).
+        await user.type(box, '25{Enter}');
+        expect(onRowNavigate).toHaveBeenCalledWith(25);
+        expect(onChange).toHaveBeenCalledWith(3);
+      });
+
+      it('clamps the row to totalItems', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const onRowNavigate = vi.fn();
+        render(
+          <Pagination
+            page={1}
+            onChange={onChange}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+            navigateBy="row"
+            onRowNavigate={onRowNavigate}
+          />,
+        );
+        const box = screen.getByRole('textbox', {name: 'Go to page'});
+        await user.clear(box);
+        await user.type(box, '999{Enter}');
+        // Clamped to row 100 → page 10.
+        expect(onRowNavigate).toHaveBeenCalledWith(100);
+        expect(onChange).toHaveBeenCalledWith(10);
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Page change callbacks
   // ---------------------------------------------------------------------------
 

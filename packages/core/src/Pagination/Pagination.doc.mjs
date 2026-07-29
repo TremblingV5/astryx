@@ -64,10 +64,23 @@ export const docs = {
     },
     {
       name: 'variant',
-      type: "'pages' | 'count' | 'compact' | 'dots' | 'none'",
+      type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'none' shows just prev/next buttons.",
+        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable number box (no 'of Y' label) that jumps on Enter/blur, 'none' shows just prev/next buttons.",
       default: "'pages'",
+    },
+    {
+      name: 'navigateBy',
+      type: "'page' | 'row'",
+      description:
+        "What the editable box navigates by in the 'input' variant. 'page' treats the value as a 1-based page number; 'row' treats it as a 1-based row index and jumps to the page containing that row (computed from pageSize), firing onRowNavigate. Row mode needs totalItems.",
+      default: "'page'",
+    },
+    {
+      name: 'onRowNavigate',
+      type: '(row: number) => void',
+      description:
+        "Called with the committed 1-based row index when the 'input' variant is in navigateBy='row' mode. Fires alongside onChange. No-op in page mode.",
     },
     {
       name: 'siblingCount',
@@ -105,6 +118,7 @@ export const docs = {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
+      {className: 'astryx-pagination-input', visualProps: ['size']},
     ],
   },
   playground: {
@@ -192,10 +206,23 @@ export const docsZh = {
     },
     {
       name: 'variant',
-      type: "'pages' | 'count' | 'compact' | 'dots' | 'none'",
+      type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'none' 仅显示上一页/下一页按钮。",
+        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示可编辑的数字框（无 'of Y' 标签），按 Enter 或失焦时跳转，'none' 仅显示上一页/下一页按钮。",
       default: "'pages'",
+    },
+    {
+      name: 'navigateBy',
+      type: "'page' | 'row'",
+      description:
+        "'input' 变体中可编辑框按什么导航。'page' 将值视为从 1 开始的页码；'row' 将其视为从 1 开始的行索引，跳转到包含该行的页（根据 pageSize 计算），并触发 onRowNavigate。行模式需要 totalItems。",
+      default: "'page'",
+    },
+    {
+      name: 'onRowNavigate',
+      type: '(row: number) => void',
+      description:
+        "当 'input' 变体处于 navigateBy='row' 模式时，以提交的从 1 开始的行索引调用。与 onChange 一起触发。页模式下无操作。",
     },
     {
       name: 'siblingCount',
@@ -233,6 +260,7 @@ export const docsZh = {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
+      {className: 'astryx-pagination-input', visualProps: ['size']},
     ],
   },
   usage: {
@@ -280,7 +308,9 @@ export const docsDense = {
     pageSize: 'Items per page; coerced to positive integer, non-finite falls back to default',
     pageSizeOptions: 'Page size options. Shows selector dropdown when provided.',
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
-    variant: 'Display between prev/next buttons.',
+    variant: "Display between prev/next buttons. 'input' = editable box, no 'of Y'.",
+    navigateBy: "'input' box navigates by 'page' or 'row'. Row mode needs totalItems.",
+    onRowNavigate: "Committed 1-based row index in navigateBy='row'. Fires with onChange.",
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',
     isDisabled: 'Component disabled.',

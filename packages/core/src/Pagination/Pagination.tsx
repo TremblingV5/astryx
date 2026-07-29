@@ -6,7 +6,8 @@
  * @file Pagination.tsx
  * @input Uses React, StyleX, Button, Icon, Selector, Text; page number buttons delegate to Button.
  *   Reads i18n direction via useDirection() to flip the prev/next chevrons under RTL.
- * @output Exports Pagination component, PaginationProps, PaginationVariant, PaginationSize types
+ * @output Exports Pagination component, PaginationProps, PaginationVariant,
+ *   PaginationNavigateBy, PaginationSize types
  * @position Core implementation; consumed by index.ts, tested by Pagination.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -16,19 +17,22 @@
  * - /packages/cli/templates/blocks/components/Pagination/ (showcase blocks)
  *
  * Last synced props: page, onChange, changeAction, totalItems, totalPages, hasMore,
- *   pageSize, pageSizeOptions, onPageSizeChange, variant, siblingCount, size, isDisabled,
- *   label, data-testid, xstyle
+ *   pageSize, pageSizeOptions, onPageSizeChange, variant, navigateBy, onRowNavigate,
+ *   siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
-import {useOptimistic, useTransition} from 'react';
+import {useOptimistic, useState, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
+  borderVars,
   colorVars,
   fontWeightVars,
+  radiusVars,
   sizeVars,
   spacingVars,
   durationVars,
   easeVars,
+  typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Button} from '../Button';
@@ -65,6 +69,7 @@ export interface PaginationVariantMap {
   count: true;
   compact: true;
   dots: true;
+  input: true;
   none: true;
 }
 
@@ -72,6 +77,15 @@ export interface PaginationVariantMap {
  * Extensible via module augmentation of PaginationVariantMap.
  */
 export type PaginationVariant = keyof PaginationVariantMap;
+
+/**
+ * What the editable input in the `input` variant navigates by.
+ * - page: the input is a 1-based page number (default).
+ * - row: the input is a 1-based row index; committing it navigates to the page
+ *   that contains that row (computed from pageSize) and reports the row via
+ *   onRowNavigate.
+ */
+export type PaginationNavigateBy = 'page' | 'row';
 
 /** Size of the pagination controls. */
 export type PaginationSize = 'sm' | 'md';
@@ -124,10 +138,27 @@ export interface PaginationProps extends Omit<
    * - count: "X–Y of Z" text
    * - compact: "Page X of Y" text
    * - dots: Dot indicators
+   * - input: An editable number box between the arrows — type a value and
+   *   commit with Enter or blur to jump. No "of Y" label or separator.
    * - none: Just prev/next buttons
    * @default 'pages'
    */
   variant?: PaginationVariant;
+  /**
+   * What the editable box navigates by in the `input` variant.
+   * - page: the box holds a 1-based page number (default).
+   * - row: the box holds a 1-based row index; committing it navigates to the
+   *   page containing that row (computed from pageSize) and fires onRowNavigate.
+   * Requires totalItems in `'row'` mode to resolve rows to pages.
+   * @default 'page'
+   */
+  navigateBy?: PaginationNavigateBy;
+  /**
+   * Called with the committed 1-based row index when the `input` variant is in
+   * `navigateBy='row'` mode. Fires alongside onChange (which moves to the page
+   * containing that row). No-op in page mode.
+   */
+  onRowNavigate?: (row: number) => void;
   /**
    * Number of page buttons to show on each side of the current page.
    * Only applies when variant='pages'. @default 1
@@ -231,6 +262,47 @@ const styles = stylex.create({
   activePage: {
     backgroundColor: colorVars['--color-neutral'],
     fontWeight: fontWeightVars['--font-weight-medium'],
+  },
+  input: {
+    width: sizeVars['--size-element-md'],
+    height: sizeVars['--size-element-md'],
+    textAlign: 'center',
+    boxSizing: 'border-box',
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-visible': colorVars['--color-accent'],
+    },
+    borderRadius: radiusVars['--radius-element'],
+    padding: 0,
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: {
+      default: typeScaleVars['--text-label-size'],
+      '@media (pointer: coarse)': `max(1rem, ${typeScaleVars['--text-label-size']})`,
+    },
+    color: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-surface'],
+    outline: {
+      default: 'none',
+      ':focus-visible': `2px solid ${colorVars['--color-accent']}`,
+    },
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': '2px',
+    },
+  },
+  inputSm: {
+    width: sizeVars['--size-element-sm'],
+    height: sizeVars['--size-element-sm'],
+    fontSize: {
+      default: typeScaleVars['--text-supporting-size'],
+      '@media (pointer: coarse)': `max(1rem, ${typeScaleVars['--text-supporting-size']})`,
+    },
+  },
+  inputDisabled: {
+    cursor: 'not-allowed',
+    opacity: 0.5,
   },
   pageSizeSelector: {
     display: 'flex',
@@ -344,6 +416,8 @@ export function Pagination({
   pageSizeOptions,
   onPageSizeChange,
   variant = 'pages',
+  navigateBy = 'page',
+  onRowNavigate,
   siblingCount = 1,
   size = 'md',
   isDisabled = false,
@@ -370,6 +444,7 @@ export function Pagination({
   const nextIcon = direction === 'rtl' ? 'chevronLeft' : 'chevronRight';
   const pageIndicatorsLabel = t('@astryx.pagination.pageIndicators');
   const itemsPerPageLabel = t('@astryx.pagination.itemsPerPage');
+  const goToPageLabel = t('@astryx.pagination.goToPageInput');
 
   // pageSize is typed as number, so 0, NaN, and negatives are valid at the
   // type level but yield Infinity/NaN page counts, and
@@ -388,6 +463,12 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
+
+  // The `input` variant edits a raw string while the user types, mirroring
+  // NumberInput/DateInput: null means "show the committed value", a string means
+  // "show what the user is typing". Commit (Enter/blur) parses + clamps and
+  // clears it; an invalid or empty commit reverts by clearing it too.
+  const [pendingInput, setPendingInput] = useState<string | null>(null);
 
   // Roving-tabindex + arrow/Home/End keyboard nav for the dots variant, owned
   // by the shared useListFocus primitive (mirrors SegmentedControl). It stamps a
@@ -486,6 +567,73 @@ export function Pagination({
     onPageSizeChange?.(newSize);
     // Reset to page 1 when page size changes.
     handlePageChange(1);
+  };
+
+  // In `'row'` mode the box holds a 1-based row index; the page that contains
+  // it is ceil(row / pageSize). Page mode is the identity mapping.
+  const pageForRow = (row: number) => Math.ceil(row / pageSize);
+
+  // The value currently shown in the input box: the page number, or the first
+  // row of the current page in row mode. Committed value only — the pending
+  // string shadows this while typing.
+  const inputCommittedValue =
+    navigateBy === 'row' ? (optimisticPage - 1) * pageSize + 1 : optimisticPage;
+
+  // Parse + clamp a committed input to a 1-based row. Returns null when the
+  // value is invalid (revert on commit). Page mode clamps to 1..totalPages;
+  // row mode clamps to 1..totalItems. The bound the value maps to differs by
+  // mode, but the shape (parse -> clamp -> null-on-invalid) is shared.
+  const parseCommittedInput = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return null;
+    }
+    if (navigateBy === 'row') {
+      return totalItems != null ? Math.min(parsed, totalItems) : null;
+    }
+    return computedTotalPages != null
+      ? Math.min(parsed, computedTotalPages)
+      : null;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPendingInput(e.target.value);
+  };
+
+  // Commit on Enter/blur: parse, clamp, navigate; clear the pending string so
+  // the box snaps back to the committed value (which reverts silently on an
+  // invalid or empty entry). In row mode the committed value is a row index —
+  // report it via onRowNavigate and move to the page that contains it.
+  const commitInput = () => {
+    if (pendingInput === null) {
+      return;
+    }
+    const committed = isDisabled ? null : parseCommittedInput(pendingInput);
+    if (committed !== null) {
+      if (navigateBy === 'row') {
+        onRowNavigate?.(committed);
+      }
+      const targetPage =
+        navigateBy === 'row' ? pageForRow(committed) : committed;
+      if (targetPage !== optimisticPage) {
+        handlePageChange(targetPage);
+      }
+    }
+    setPendingInput(null);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitInput();
+    } else if (e.key === 'Escape') {
+      // Discard the in-progress edit without navigating.
+      setPendingInput(null);
+    }
   };
 
   // Item range for count display
@@ -630,6 +778,30 @@ export function Pagination({
               );
             })}
           </div>
+        );
+      }
+
+      case 'input': {
+        return (
+          <input
+            type="text"
+            inputMode="numeric"
+            aria-label={goToPageLabel}
+            value={pendingInput ?? String(inputCommittedValue)}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            onBlur={commitInput}
+            disabled={isDisabled}
+            data-testid={testId != null ? `${testId}-input` : undefined}
+            {...mergeProps(
+              themeProps('pagination-input', {size}),
+              stylex.props(
+                styles.input,
+                isSm && styles.inputSm,
+                isDisabled && styles.inputDisabled,
+              ),
+            )}
+          />
         );
       }
 

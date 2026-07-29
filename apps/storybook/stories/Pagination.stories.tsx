@@ -16,7 +16,7 @@ const meta: Meta<typeof Pagination> = {
     },
     variant: {
       control: 'select',
-      options: ['pages', 'count', 'compact', 'dots', 'none'],
+      options: ['pages', 'count', 'compact', 'dots', 'input', 'none'],
       description: 'Visual variant',
     },
     size: {
@@ -99,6 +99,27 @@ export const NoneVariant: Story = {
   render: () => <PaginationDemo page={1} totalPages={5} variant="none" />,
 };
 
+export const InputVariant: Story = {
+  name: 'Variant: Input (page mode)',
+  render: () => (
+    <PaginationDemo page={3} totalItems={200} pageSize={10} variant="input" />
+  ),
+};
+
+export const InputVariantRowMode: Story = {
+  name: 'Variant: Input (row mode)',
+  render: () => (
+    <PaginationDemo
+      page={3}
+      totalItems={200}
+      pageSize={10}
+      variant="input"
+      navigateBy="row"
+      onRowNavigate={row => console.log('navigate to row', row)}
+    />
+  ),
+};
+
 export const WithPageSizeSelector: Story = {
   name: 'With Page Size Selector',
   render: () => (
@@ -174,6 +195,15 @@ export const AllVariants: Story = {
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>dots</p>
         <PaginationDemo page={3} totalPages={8} variant="dots" />
+      </div>
+      <div>
+        <p style={{marginBottom: 8, fontWeight: 500}}>input</p>
+        <PaginationDemo
+          page={3}
+          totalItems={100}
+          pageSize={10}
+          variant="input"
+        />
       </div>
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>none</p>
