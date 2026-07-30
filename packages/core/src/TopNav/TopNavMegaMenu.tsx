@@ -12,6 +12,20 @@
  * eliminating z-index stacking. CSS anchor positioning places the panel below
  * the nav wrapper.
  *
+ * The default (desktop) trigger opens on hover and on click:
+ * - Hover opens a *transient* panel that closes when the pointer leaves.
+ * - A click (or keyboard activation) *pins* the panel open so it persists past
+ *   mouse-leave. A hover-open that is then clicked within CLICK_GUARD_MS is
+ *   pinned rather than toggled shut (the "click guard") — this is what fixes
+ *   the hover-then-click flicker.
+ * The panel is a *manual* popover (no native light dismiss): a native
+ * `popover="auto"` light-dismisses on the trigger's pointerdown (the trigger
+ * sits outside the panel), which closed a hover-opened panel before the guard
+ * could run — the real cause of #3121. Outside-click dismissal is reproduced
+ * explicitly. Keyboard (Enter/Space) always opens and moves focus into the
+ * panel; Escape closes and returns focus to the trigger. Touch has no hover,
+ * so taps toggle cleanly. See issue #3121.
+ *
  * Supports three render modes via TopNavRenderContext:
  * - 'default': desktop popover mega menu (hover/click triggered)
  * - 'mobile-bar': returns null (hidden in compact mobile bar)
@@ -330,6 +344,14 @@ TopNavMegaMenu.displayName = 'TopNavMegaMenu';
 // DefaultMegaMenu — desktop popover mode
 // =============================================================================
 
+/**
+ * How long (ms) after a hover-open a click on the trigger is treated as the
+ * natural click that confirms (and pins open) the hover — rather than a
+ * deliberate click-to-close. Mirrors the guard vercel.com uses on its Products
+ * dropdown. See issue #3121.
+ */
+const CLICK_GUARD_MS = 500;
+
 function DefaultMegaMenu({
   ref,
   label,
@@ -343,26 +365,47 @@ function DefaultMegaMenu({
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
-  const clickLockedRef = useRef(false);
+  // Timestamp (ms) of the last hover-triggered open. Set ONLY when a hover
+  // opens the panel; the click handler consults it to tell a hover-follow
+  // "confirm" click apart from a deliberate one (the Vercel-style guard).
+  // Stays 0 for click / touch / keyboard opens. See issue #3121.
+  const hoverOpenedAtRef = useRef(0);
+  // Whether the panel is "pinned" open by a click or keyboard activation.
+  // Pinned panels ignore mouse-leave (a deliberate open should persist);
+  // hover-opened panels stay transient and close when the pointer leaves.
+  const stickyRef = useRef(false);
 
   const handlePopoverShow = useCallback(() => {
     onOpenChange?.(true);
   }, [onOpenChange]);
 
   const handlePopoverHide = useCallback(() => {
+    // Any close (click, mouseleave, Escape, outside pointerdown) resets the
+    // hover guard and the pinned state so the next interaction starts fresh.
+    hoverOpenedAtRef.current = 0;
+    stickyRef.current = false;
     onOpenChange?.(false);
   }, [onOpenChange]);
 
   const popover = usePopover({
     // role: 'none' — the panel exposes its own role="group" labeled by
-    // `label`. Focus stays on the trigger while the panel is open, so a
-    // role="dialog" aria-modal="true" wrapper would announce an unnamed
-    // modal dialog around a grid of links.
+    // `label`. Pointer/hover opens keep focus on the trigger; keyboard and
+    // assistive-tech opens move focus into the panel (a labeled group you exit
+    // with Escape or by tabbing out). Either way role="dialog"
+    // aria-modal="true" would be wrong: it announces an unnamed modal dialog
+    // around a grid of links (and, when focus stays on the trigger, marks the
+    // focused control inert).
     role: 'none',
     // hasSurface: false — mega menu provides its own surface (panelContainer)
     // with border-top and custom overflow. Animation is applied via the
     // render() call's xstyle prop (panelAnimation), not the hook options.
     hasSurface: false,
+    // Manual (not light-dismiss): a native popover="auto" light-dismisses on a
+    // pointerdown on the trigger — which sits outside the panel — closing a
+    // hover-opened panel before the click guard runs. That was the real cause
+    // of the hover-then-click flicker (#3121). Outside-click dismissal is
+    // handled by the effect below; Escape still closes via the focus trap.
+    hasLightDismiss: false,
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
   });
@@ -392,6 +435,9 @@ function DefaultMegaMenu({
   const scheduleShow = useCallback(() => {
     clearTimeouts();
     showTimeoutRef.current = setTimeout(() => {
+      // Hover-intent fired: record when the panel opened so the click that
+      // often follows a hover can be told apart from a deliberate one.
+      hoverOpenedAtRef.current = Date.now();
       popover.show({skipAutoFocus: true});
     }, delay);
   }, [clearTimeouts, popover, delay]);
@@ -403,35 +449,125 @@ function DefaultMegaMenu({
     }, hideDelay);
   }, [clearTimeouts, popover, hideDelay]);
 
+  // Move keyboard focus to the first link inside the open panel.
+  const focusFirstPanelItem = useCallback(() => {
+    popover.contentRef.current
+      ?.querySelector<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      ?.focus();
+  }, [popover.contentRef]);
+
   const handleMouseEnter = useCallback(() => {
-    if (!clickLockedRef.current) {
+    // Entering the trigger (or the open panel) cancels a pending hide. Only
+    // arm a hover-open while closed — never re-stamp the guard on an already
+    // open panel, which would keep swallowing deliberate close clicks.
+    clearTimeouts();
+    if (!popover.isOpen) {
       scheduleShow();
     }
-  }, [scheduleShow]);
+  }, [clearTimeouts, popover.isOpen, scheduleShow]);
 
   const handleMouseLeave = useCallback(() => {
-    if (!clickLockedRef.current) {
+    // A panel pinned open by a click/keyboard stays open when the pointer
+    // leaves; only hover-opened (transient) panels close on mouse-leave.
+    if (!stickyRef.current) {
       scheduleHide();
     }
   }, [scheduleHide]);
 
-  const handleClick = useCallback(() => {
-    clearTimeouts();
-    if (popover.isOpen) {
-      clickLockedRef.current = false;
-      popover.hide();
-      triggerButtonRef.current?.focus();
-    } else {
-      clickLockedRef.current = true;
-      popover.show();
-    }
-  }, [popover, clearTimeouts]);
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      clearTimeouts();
+
+      // Keyboard (Enter/Space) and programmatic activation fire a click with
+      // detail 0; real pointer clicks report detail >= 1. Keyboard always
+      // OPENS (never toggles closed), pins the panel open, and moves focus
+      // into it — the accessible open/focus model. See issue #3121.
+      if (e.detail === 0) {
+        stickyRef.current = true;
+        hoverOpenedAtRef.current = 0;
+        if (popover.isOpen) {
+          focusFirstPanelItem();
+        } else {
+          // usePopover auto-focuses the first link once the panel mounts.
+          popover.show();
+        }
+        return;
+      }
+
+      if (!popover.isOpen) {
+        // Pointer open (click / tap). A deliberate open is pinned so it
+        // persists past mouse-leave; focus stays on the trigger.
+        stickyRef.current = true;
+        popover.show({skipAutoFocus: true});
+      } else if (Date.now() - hoverOpenedAtRef.current < CLICK_GUARD_MS) {
+        // The panel just opened on hover and appeared under the cursor. This
+        // click confirms it rather than dismissing it: pin it open (so it no
+        // longer closes on mouse-leave) and reset the guard so the NEXT click
+        // is a deliberate close.
+        stickyRef.current = true;
+        hoverOpenedAtRef.current = 0;
+      } else {
+        // Deliberate click-to-close.
+        popover.hide();
+        triggerButtonRef.current?.focus();
+      }
+    },
+    [clearTimeouts, popover, focusFirstPanelItem],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLButtonElement>) => {
+      // Escape closes the panel and returns focus to the trigger. Escape from
+      // within the panel is handled by usePopover's focus trap (which restores
+      // focus to the trigger); this covers Escape while focus is on the
+      // trigger (e.g. a pointer-opened panel). See issue #3121.
+      if (e.key === 'Escape' && popover.isOpen) {
+        e.preventDefault();
+        clearTimeouts();
+        popover.hide();
+        triggerButtonRef.current?.focus();
+      }
+    },
+    [clearTimeouts, popover],
+  );
 
   useEffect(() => {
     return () => {
       clearTimeouts();
     };
   }, [clearTimeouts]);
+
+  // Outside-click dismissal. The panel is a manual popover (no native light
+  // dismiss — see the usePopover call), so we reproduce "click outside closes"
+  // ourselves while EXCLUDING the trigger and the panel. Excluding the trigger
+  // is the point: a pointerdown on it must not close the panel, so the click
+  // guard in handleClick can decide whether the click confirms or dismisses
+  // (#3121). Capture phase so a child's stopPropagation can't hide the panel
+  // from us.
+  useEffect(() => {
+    if (!popover.isOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      const trigger = triggerButtonRef.current;
+      const panel = document.getElementById(popover.id);
+      if (trigger?.contains(target) || panel?.contains(target)) {
+        return;
+      }
+      clearTimeouts();
+      popover.hide();
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
+  }, [popover.isOpen, popover, clearTimeouts]);
 
   return (
     <>
@@ -440,6 +576,7 @@ function DefaultMegaMenu({
         type="button"
         {...popover.triggerProps}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         {...mergeProps(
