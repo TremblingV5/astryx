@@ -522,7 +522,7 @@ describe('Pagination', () => {
   // ---------------------------------------------------------------------------
 
   describe('variant: input', () => {
-    it('renders an editable box between the arrows with no "of Y" label', () => {
+    it('renders "Page [ n ] / N" with an editable box in page mode', () => {
       render(
         <Pagination
           page={3}
@@ -535,17 +535,26 @@ describe('Pagination', () => {
       const box = screen.getByRole('textbox', {name: 'Go to page'});
       expect(box).toBeInTheDocument();
       expect(box).toHaveValue('3');
-      // No separator / "of Y" text and no page-number buttons.
-      expect(screen.queryByText(/of/i)).not.toBeInTheDocument();
+      // Visible leading "Page" label and trailing "/ N" total (10 pages).
+      expect(screen.getByText('Page')).toBeInTheDocument();
+      expect(screen.getByText('/ 10')).toBeInTheDocument();
+      // No page-number buttons and no range readout ("Showing 1–N of M").
       expect(
         screen.queryByRole('button', {name: /Go to page \d/}),
       ).not.toBeInTheDocument();
-      // Still flanked by prev/next.
+      expect(screen.queryByText(/Showing/i)).not.toBeInTheDocument();
+      // Flanked by first/prev/next/last.
+      expect(
+        screen.getByRole('button', {name: 'Go to first page'}),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
       ).toBeInTheDocument();
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {name: 'Go to last page'}),
       ).toBeInTheDocument();
     });
 
@@ -650,14 +659,159 @@ describe('Pagination', () => {
       );
       const box = screen.getByRole('textbox', {name: 'Go to page'});
       expect(box).toBeDisabled();
-      // Prev/next are disabled at nothing special here, but disabled input
-      // never fires a change.
+      // Disabled input never fires a change.
       await user.type(box, '5{Enter}');
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    // -------------------------------------------------------------------------
+    // First / Last buttons
+    // -------------------------------------------------------------------------
+
+    describe('first/last buttons', () => {
+      it('first jumps to page 1, last jumps to the final page', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        render(
+          <Pagination
+            page={5}
+            onChange={onChange}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />,
+        );
+        await user.click(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        );
+        expect(onChange).toHaveBeenCalledWith(1);
+
+        onChange.mockClear();
+        await user.click(screen.getByRole('button', {name: 'Go to last page'}));
+        // 100 items / 10 per page → 10 pages.
+        expect(onChange).toHaveBeenCalledWith(10);
+      });
+
+      it('disables first on the first page and last on the last page', () => {
+        const {rerender} = render(
+          <Pagination
+            page={1}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />,
+        );
+        expect(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole('button', {name: 'Go to last page'}),
+        ).not.toBeDisabled();
+
+        rerender(
+          <Pagination
+            page={10}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />,
+        );
+        expect(
+          screen.getByRole('button', {name: 'Go to last page'}),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        ).not.toBeDisabled();
+      });
+
+      it('hides first/last when hasFirstLast is false', () => {
+        render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+            hasFirstLast={false}
+          />,
+        );
+        expect(
+          screen.queryByRole('button', {name: 'Go to first page'}),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', {name: 'Go to last page'}),
+        ).not.toBeInTheDocument();
+        // prev/next still present.
+        expect(
+          screen.getByRole('button', {name: 'Go to previous page'}),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', {name: 'Go to next page'}),
+        ).toBeInTheDocument();
+      });
+
+      it('omits first/last when the total page count is unknown', () => {
+        render(
+          <Pagination page={2} onChange={() => {}} hasMore variant="input" />,
+        );
+        expect(
+          screen.queryByRole('button', {name: 'Go to first page'}),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', {name: 'Go to last page'}),
+        ).not.toBeInTheDocument();
+      });
+
+      it('renders the double-chevron icons for first/last', () => {
+        const {container} = render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />,
+        );
+        // Each default double-chevron icon draws two chevron paths in one <path>
+        // ("M...M..."); assert both first and last render an svg with two moves.
+        const first = screen.getByRole('button', {name: 'Go to first page'});
+        const last = screen.getByRole('button', {name: 'Go to last page'});
+        for (const btn of [first, last]) {
+          const path = btn.querySelector('svg path');
+          expect(path).not.toBeNull();
+          const d = path?.getAttribute('d') ?? '';
+          expect((d.match(/M/g) ?? []).length).toBe(2);
+        }
+        expect(container).toBeTruthy();
+      });
+
+      it('does not add first/last to other variants (e.g. pages)', () => {
+        render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="pages"
+          />,
+        );
+        expect(
+          screen.queryByRole('button', {name: 'Go to first page'}),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', {name: 'Go to last page'}),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Row mode
+    // -------------------------------------------------------------------------
+
     describe('navigateBy="row"', () => {
-      it('shows the first row of the current page', () => {
+      it('renders "Row [ n ]" with NO "/ N" total', () => {
         render(
           <Pagination
             page={3}
@@ -668,6 +822,10 @@ describe('Pagination', () => {
             navigateBy="row"
           />,
         );
+        // Visible "Row" label, no "Page" label, no "/ N" total.
+        expect(screen.getByText('Row')).toBeInTheDocument();
+        expect(screen.queryByText('Page')).not.toBeInTheDocument();
+        expect(screen.queryByText(/^\/ /)).not.toBeInTheDocument();
         // Page 3, pageSize 10 → first row is 21.
         expect(screen.getByRole('textbox', {name: 'Go to page'})).toHaveValue(
           '21',

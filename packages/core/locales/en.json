@@ -11,6 +11,14 @@
     "defaultMessage": "Go to next page",
     "description": "Aria label for the next-page button."
   },
+  "@astryx.pagination.first": {
+    "defaultMessage": "Go to first page",
+    "description": "Aria label for the first-page button (« double chevron) in the input pagination variant."
+  },
+  "@astryx.pagination.last": {
+    "defaultMessage": "Go to last page",
+    "description": "Aria label for the last-page button (» double chevron) in the input pagination variant."
+  },
   "@astryx.pagination.goToPage": {
     "defaultMessage": "Go to page {page, number}",
     "description": "Aria label for an individual page-number button. `page` is 1-based."
@@ -18,6 +26,18 @@
   "@astryx.pagination.goToPageInput": {
     "defaultMessage": "Go to page",
     "description": "Aria label for the editable page/row number box in the input pagination variant. No number — the box holds the value itself."
+  },
+  "@astryx.pagination.pageLabel": {
+    "defaultMessage": "Page",
+    "description": "Visible label before the editable box in the input pagination variant, page mode. Example: \"Page [ 1 ] / 10\"."
+  },
+  "@astryx.pagination.rowLabel": {
+    "defaultMessage": "Row",
+    "description": "Visible label before the editable box in the input pagination variant, row mode. Example: \"Row [ 1 ]\"."
+  },
+  "@astryx.pagination.ofTotalPages": {
+    "defaultMessage": "/ {total, number}",
+    "description": "Visible total shown after the editable box in the input pagination variant, page mode only. Example: the \"/ 10\" in \"Page [ 1 ] / 10\"."
   },
   "@astryx.pagination.pageIndicators": {
     "defaultMessage": "Page indicators",

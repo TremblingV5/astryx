@@ -29,6 +29,8 @@ export type IconName =
   | 'chevronDown'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'chevronsLeft'
+  | 'chevronsRight'
   | 'check'
   | 'success'
   | 'error'

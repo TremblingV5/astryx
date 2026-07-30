@@ -5,7 +5,8 @@
 /**
  * @file Pagination.tsx
  * @input Uses React, StyleX, Button, Icon, Selector, Text; page number buttons delegate to Button.
- *   Reads i18n direction via useDirection() to flip the prev/next chevrons under RTL.
+ *   Reads i18n direction via useDirection() to flip the prev/next/first/last chevrons under RTL.
+ *   The input variant uses the chevronsLeft/chevronsRight (first/last) icons.
  * @output Exports Pagination component, PaginationProps, PaginationVariant,
  *   PaginationNavigateBy, PaginationSize types
  * @position Core implementation; consumed by index.ts, tested by Pagination.test.tsx
@@ -18,7 +19,7 @@
  *
  * Last synced props: page, onChange, changeAction, totalItems, totalPages, hasMore,
  *   pageSize, pageSizeOptions, onPageSizeChange, variant, navigateBy, onRowNavigate,
- *   siblingCount, size, isDisabled, label, data-testid, xstyle
+ *   hasFirstLast, siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
 import {useOptimistic, useState, useTransition} from 'react';
@@ -80,10 +81,10 @@ export type PaginationVariant = keyof PaginationVariantMap;
 
 /**
  * What the editable input in the `input` variant navigates by.
- * - page: the input is a 1-based page number (default).
- * - row: the input is a 1-based row index; committing it navigates to the page
- *   that contains that row (computed from pageSize) and reports the row via
- *   onRowNavigate.
+ * - page: the input is a 1-based page number (default); renders "Page [ n ] / N".
+ * - row: the input is a 1-based row index; renders "Row [ n ]" (no total) and,
+ *   on commit, navigates to the page that contains that row (computed from
+ *   pageSize) and reports the row via onRowNavigate.
  */
 export type PaginationNavigateBy = 'page' | 'row';
 
@@ -138,17 +139,20 @@ export interface PaginationProps extends Omit<
    * - count: "X–Y of Z" text
    * - compact: "Page X of Y" text
    * - dots: Dot indicators
-   * - input: An editable number box between the arrows — type a value and
-   *   commit with Enter or blur to jump. No "of Y" label or separator.
+   * - input: An editable number box with a leading label. Page mode renders
+   *   "Page [ n ] / N"; row mode renders "Row [ n ]" (no total). First/last
+   *   double-chevron buttons flank prev/next by default (see hasFirstLast).
    * - none: Just prev/next buttons
    * @default 'pages'
    */
   variant?: PaginationVariant;
   /**
    * What the editable box navigates by in the `input` variant.
-   * - page: the box holds a 1-based page number (default).
-   * - row: the box holds a 1-based row index; committing it navigates to the
-   *   page containing that row (computed from pageSize) and fires onRowNavigate.
+   * - page: the box holds a 1-based page number (default), rendered as
+   *   "Page [ n ] / N".
+   * - row: the box holds a 1-based row index, rendered as "Row [ n ]" (no
+   *   total); committing it navigates to the page containing that row
+   *   (computed from pageSize) and fires onRowNavigate.
    * Requires totalItems in `'row'` mode to resolve rows to pages.
    * @default 'page'
    */
@@ -159,6 +163,13 @@ export interface PaginationProps extends Omit<
    * containing that row). No-op in page mode.
    */
   onRowNavigate?: (row: number) => void;
+  /**
+   * Whether to show first/last («/») double-chevron buttons flanking
+   * prev/next. Only applies to the `input` variant; other variants ignore it.
+   * The last button needs a known total — it is omitted when the page count is
+   * unknown (cursor/hasMore pagination). @default true
+   */
+  hasFirstLast?: boolean;
   /**
    * Number of page buttons to show on each side of the current page.
    * Only applies when variant='pages'. @default 1
@@ -304,6 +315,28 @@ const styles = stylex.create({
     cursor: 'not-allowed',
     opacity: 0.5,
   },
+  inputGroup: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+    whiteSpace: 'nowrap',
+  },
+  inputLabel: {
+    color: colorVars['--color-text-secondary'],
+    fontSize: typeScaleVars['--text-label-size'],
+    userSelect: 'none',
+  },
+  inputLabelSm: {
+    fontSize: typeScaleVars['--text-supporting-size'],
+  },
+  inputTotal: {
+    color: colorVars['--color-text-secondary'],
+    fontSize: typeScaleVars['--text-label-size'],
+    userSelect: 'none',
+  },
+  inputTotalSm: {
+    fontSize: typeScaleVars['--text-supporting-size'],
+  },
   pageSizeSelector: {
     display: 'flex',
     alignItems: 'center',
@@ -418,6 +451,7 @@ export function Pagination({
   variant = 'pages',
   navigateBy = 'page',
   onRowNavigate,
+  hasFirstLast = true,
   siblingCount = 1,
   size = 'md',
   isDisabled = false,
@@ -436,15 +470,23 @@ export function Pagination({
   const label = labelFromProps ?? t('@astryx.pagination.label');
   const previousLabel = t('@astryx.pagination.previous');
   const nextLabel = t('@astryx.pagination.next');
+  const firstLabel = t('@astryx.pagination.first');
+  const lastLabel = t('@astryx.pagination.last');
 
-  // Directional icons: under RTL, the "previous" control points right and the
-  // "next" control points left. aria-labels stay semantic (unchanged).
+  // Directional icons: under RTL, the "previous"/"first" controls point right
+  // and the "next"/"last" controls point left. aria-labels stay semantic.
   const direction = useDirection();
   const previousIcon = direction === 'rtl' ? 'chevronRight' : 'chevronLeft';
   const nextIcon = direction === 'rtl' ? 'chevronLeft' : 'chevronRight';
+  const firstIcon = direction === 'rtl' ? 'chevronsRight' : 'chevronsLeft';
+  const lastIcon = direction === 'rtl' ? 'chevronsLeft' : 'chevronsRight';
   const pageIndicatorsLabel = t('@astryx.pagination.pageIndicators');
   const itemsPerPageLabel = t('@astryx.pagination.itemsPerPage');
   const goToPageLabel = t('@astryx.pagination.goToPageInput');
+  const inputLabelText =
+    navigateBy === 'row'
+      ? t('@astryx.pagination.rowLabel')
+      : t('@astryx.pagination.pageLabel');
 
   // pageSize is typed as number, so 0, NaN, and negatives are valid at the
   // type level but yield Infinity/NaN page counts, and
@@ -559,6 +601,18 @@ export function Pagination({
   const handleNext = () => {
     if (hasNext) {
       handlePageChange(optimisticPage + 1);
+    }
+  };
+
+  const handleFirst = () => {
+    if (hasPrevious) {
+      handlePageChange(1);
+    }
+  };
+
+  const handleLast = () => {
+    if (hasNext && computedTotalPages != null) {
+      handlePageChange(computedTotalPages);
     }
   };
 
@@ -783,25 +837,46 @@ export function Pagination({
 
       case 'input': {
         return (
-          <input
-            type="text"
-            inputMode="numeric"
-            aria-label={goToPageLabel}
-            value={pendingInput ?? String(inputCommittedValue)}
-            onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
-            onBlur={commitInput}
-            disabled={isDisabled}
-            data-testid={testId != null ? `${testId}-input` : undefined}
-            {...mergeProps(
-              themeProps('pagination-input', {size}),
-              stylex.props(
-                styles.input,
-                isSm && styles.inputSm,
-                isDisabled && styles.inputDisabled,
-              ),
+          <span {...stylex.props(styles.inputGroup)}>
+            <span
+              aria-hidden="true"
+              {...mergeProps(
+                themeProps('pagination-input-label', {size}),
+                stylex.props(styles.inputLabel, isSm && styles.inputLabelSm),
+              )}>
+              {inputLabelText}
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label={goToPageLabel}
+              value={pendingInput ?? String(inputCommittedValue)}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              onBlur={commitInput}
+              disabled={isDisabled}
+              data-testid={testId != null ? `${testId}-input` : undefined}
+              {...mergeProps(
+                themeProps('pagination-input', {size}),
+                stylex.props(
+                  styles.input,
+                  isSm && styles.inputSm,
+                  isDisabled && styles.inputDisabled,
+                ),
+              )}
+            />
+            {navigateBy === 'page' && computedTotalPages != null && (
+              <span
+                {...mergeProps(
+                  themeProps('pagination-input-total', {size}),
+                  stylex.props(styles.inputTotal, isSm && styles.inputTotalSm),
+                )}>
+                {t('@astryx.pagination.ofTotalPages', {
+                  total: computedTotalPages,
+                })}
+              </span>
             )}
-          />
+          </span>
         );
       }
 
@@ -839,6 +914,18 @@ export function Pagination({
         </div>
       )}
       <div {...stylex.props(styles.controls)}>
+        {hasFirstLast && variant === 'input' && computedTotalPages != null && (
+          <Button
+            label={firstLabel}
+            variant="ghost"
+            size={buttonSize}
+            icon={<Icon icon={firstIcon} size={isSm ? 'sm' : 'md'} />}
+            onClick={handleFirst}
+            isDisabled={isDisabled || !hasPrevious}
+            isIconOnly
+          />
+        )}
+
         <Button
           label={previousLabel}
           variant="ghost"
@@ -860,6 +947,18 @@ export function Pagination({
           isDisabled={isDisabled || !hasNext}
           isIconOnly
         />
+
+        {hasFirstLast && variant === 'input' && computedTotalPages != null && (
+          <Button
+            label={lastLabel}
+            variant="ghost"
+            size={buttonSize}
+            icon={<Icon icon={lastIcon} size={isSm ? 'sm' : 'md'} />}
+            onClick={handleLast}
+            isDisabled={isDisabled || !hasNext}
+            isIconOnly
+          />
+        )}
       </div>
     </nav>
   );

@@ -66,14 +66,14 @@ export const docs = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable number box (no 'of Y' label) that jumps on Enter/blur, 'none' shows just prev/next buttons.",
+        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable number box with a leading label — 'Page [ n ] / N' in page mode, 'Row [ n ]' in row mode — flanked by first/last buttons by default, 'none' shows just prev/next buttons.",
       default: "'pages'",
     },
     {
       name: 'navigateBy',
       type: "'page' | 'row'",
       description:
-        "What the editable box navigates by in the 'input' variant. 'page' treats the value as a 1-based page number; 'row' treats it as a 1-based row index and jumps to the page containing that row (computed from pageSize), firing onRowNavigate. Row mode needs totalItems.",
+        "What the editable box navigates by in the 'input' variant. 'page' renders 'Page [ n ] / N' and treats the value as a 1-based page number; 'row' renders 'Row [ n ]' (no total), treats the value as a 1-based row index, jumps to the page containing that row (computed from pageSize), and fires onRowNavigate. Row mode needs totalItems.",
       default: "'page'",
     },
     {
@@ -81,6 +81,13 @@ export const docs = {
       type: '(row: number) => void',
       description:
         "Called with the committed 1-based row index when the 'input' variant is in navigateBy='row' mode. Fires alongside onChange. No-op in page mode.",
+    },
+    {
+      name: 'hasFirstLast',
+      type: 'boolean',
+      description:
+        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Only applies to the 'input' variant; omitted when the page count is unknown (cursor/hasMore pagination).",
+      default: 'true',
     },
     {
       name: 'siblingCount',
@@ -119,6 +126,8 @@ export const docs = {
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input', visualProps: ['size']},
+      {className: 'astryx-pagination-input-label', visualProps: ['size']},
+      {className: 'astryx-pagination-input-total', visualProps: ['size']},
     ],
   },
   playground: {
@@ -208,14 +217,14 @@ export const docsZh = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示可编辑的数字框（无 'of Y' 标签），按 Enter 或失焦时跳转，'none' 仅显示上一页/下一页按钮。",
+        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示带前置标签的可编辑数字框——页模式为 'Page [ n ] / N'，行模式为 'Row [ n ]'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
       default: "'pages'",
     },
     {
       name: 'navigateBy',
       type: "'page' | 'row'",
       description:
-        "'input' 变体中可编辑框按什么导航。'page' 将值视为从 1 开始的页码；'row' 将其视为从 1 开始的行索引，跳转到包含该行的页（根据 pageSize 计算），并触发 onRowNavigate。行模式需要 totalItems。",
+        "'input' 变体中可编辑框按什么导航。'page' 渲染 'Page [ n ] / N' 并将值视为从 1 开始的页码；'row' 渲染 'Row [ n ]'（无总数），将其视为从 1 开始的行索引，跳转到包含该行的页（根据 pageSize 计算），并触发 onRowNavigate。行模式需要 totalItems。",
       default: "'page'",
     },
     {
@@ -223,6 +232,13 @@ export const docsZh = {
       type: '(row: number) => void',
       description:
         "当 'input' 变体处于 navigateBy='row' 模式时，以提交的从 1 开始的行索引调用。与 onChange 一起触发。页模式下无操作。",
+    },
+    {
+      name: 'hasFirstLast',
+      type: 'boolean',
+      description:
+        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。仅适用于 'input' 变体；当页数未知（游标/hasMore 分页）时省略。",
+      default: 'true',
     },
     {
       name: 'siblingCount',
@@ -261,6 +277,8 @@ export const docsZh = {
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
       {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input', visualProps: ['size']},
+      {className: 'astryx-pagination-input-label', visualProps: ['size']},
+      {className: 'astryx-pagination-input-total', visualProps: ['size']},
     ],
   },
   usage: {
@@ -308,9 +326,10 @@ export const docsDense = {
     pageSize: 'Items per page; coerced to positive integer, non-finite falls back to default',
     pageSizeOptions: 'Page size options. Shows selector dropdown when provided.',
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
-    variant: "Display between prev/next buttons. 'input' = editable box, no 'of Y'.",
-    navigateBy: "'input' box navigates by 'page' or 'row'. Row mode needs totalItems.",
+    variant: "Display between prev/next. 'input' = 'Page [n] / N' (page) or 'Row [n]' (row) + first/last.",
+    navigateBy: "'input' box navigates by 'page' (shows / N) or 'row' (no total). Row mode needs totalItems.",
     onRowNavigate: "Committed 1-based row index in navigateBy='row'. Fires with onChange.",
+    hasFirstLast: "Show first/last («/») buttons in the 'input' variant. Omitted when total unknown.",
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',
     isDisabled: 'Component disabled.',

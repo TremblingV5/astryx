@@ -19,6 +19,15 @@ const meta: Meta<typeof Pagination> = {
       options: ['pages', 'count', 'compact', 'dots', 'input', 'none'],
       description: 'Visual variant',
     },
+    navigateBy: {
+      control: 'select',
+      options: ['page', 'row'],
+      description: "input variant: navigate by 'page' or 'row'",
+    },
+    hasFirstLast: {
+      control: 'boolean',
+      description: 'input variant: show first/last («/») buttons',
+    },
     size: {
       control: 'select',
       options: ['sm', 'md'],
@@ -102,6 +111,7 @@ export const NoneVariant: Story = {
 export const InputVariant: Story = {
   name: 'Variant: Input (page mode)',
   render: () => (
+    // Full primitive: « ‹ Page [ n ] / N › »
     <PaginationDemo page={3} totalItems={200} pageSize={10} variant="input" />
   ),
 };
@@ -109,6 +119,7 @@ export const InputVariant: Story = {
 export const InputVariantRowMode: Story = {
   name: 'Variant: Input (row mode)',
   render: () => (
+    // Row mode: « ‹ Row [ n ] › » (no "/ N" total)
     <PaginationDemo
       page={3}
       totalItems={200}
@@ -116,6 +127,20 @@ export const InputVariantRowMode: Story = {
       variant="input"
       navigateBy="row"
       onRowNavigate={row => console.log('navigate to row', row)}
+    />
+  ),
+};
+
+export const InputVariantNoFirstLast: Story = {
+  name: 'Variant: Input (no first/last)',
+  render: () => (
+    // Just ‹ Page [ n ] / N › — first/last buttons hidden.
+    <PaginationDemo
+      page={3}
+      totalItems={200}
+      pageSize={10}
+      variant="input"
+      hasFirstLast={false}
     />
   ),
 };
