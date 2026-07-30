@@ -16,6 +16,14 @@
  * a stable code). Human progress is emitted through the shared `logger`
  * (silent by default), so the CLI keeps its exact output while a programmatic
  * caller stays quiet.
+ *
+ * With `{check: true}`, it compiles the same outputs in memory but writes
+ * nothing: it compares each generated file against what is on disk (ignoring
+ * the volatile `@generated` header lines — `Generated:` timestamp and
+ * `Command:`) and returns a `theme.build.check` receipt listing any stale or
+ * missing outputs. This is the CI guard for committed, generated theme CSS:
+ * the source of truth is `<theme>.ts`, and `theme build --check` fails when the
+ * committed `<theme>.css`/`.js`/`.d.ts` no longer match it.
  */
 
 import * as fs from 'node:fs';
@@ -23,10 +31,7 @@ import * as path from 'node:path';
 import {pathToFileURL, fileURLToPath} from 'node:url';
 import {createJiti} from 'jiti';
 import {getCliInvocation} from '../../../utils/package-manager.mjs';
-import {
-  sanitizeName,
-  PathSafetyError,
-} from '../../../utils/path-safety.mjs';
+import {sanitizeName, PathSafetyError} from '../../../utils/path-safety.mjs';
 import {ERROR_CODES} from '../../../lib/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {logger} from '../../logger.mjs';
@@ -79,13 +84,36 @@ function generatedHeader(sourceFile, lang = 'js', command) {
 }
 
 /**
+ * Normalize generated file content for staleness comparison by dropping the
+ * volatile lines of the `@generated` header — the `Generated:` timestamp and
+ * the `Command:` line (which embeds the invocation, e.g. an explicit --out).
+ * Everything else (including the rest of the header and all real content) is
+ * compared verbatim. Used only by `--check`: a differing timestamp/command must
+ * NOT report a file as stale, but any real content drift must.
+ * @param {string} content
+ * @returns {string}
+ */
+function normalizeForCompare(content) {
+  return content
+    .split('\n')
+    .filter(line => {
+      const t = line.replace(/^\s*\*?\s?/, '');
+      return !t.startsWith('Generated:') && !t.startsWith('Command:');
+    })
+    .join('\n');
+}
+
+/**
  * Convert a theme name to a valid JS identifier.
  * e.g. 'default-minimal' → 'defaultMinimal', 'ocean' → 'ocean'
  * @param {string} name
  * @returns {string}
  */
 function toIdentifier(name) {
-  return name.replace(/-([a-z])/g, (/** @type {string} */ _, /** @type {string} */ c) => c.toUpperCase());
+  return name.replace(
+    /-([a-z])/g,
+    (/** @type {string} */ _, /** @type {string} */ c) => c.toUpperCase(),
+  );
 }
 
 /**
@@ -114,7 +142,10 @@ export function importSpecifier(relDir, base) {
 function toPascalCase(name) {
   return name
     .split('-')
-    .map((/** @type {string} */ part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(
+      (/** @type {string} */ part) =>
+        part.charAt(0).toUpperCase() + part.slice(1),
+    )
     .join('');
 }
 
@@ -131,11 +162,15 @@ async function loadKnownValues(componentName) {
   const coreSrc = path.resolve(cliDir, '../../../../core/src');
   if (!fs.existsSync(coreSrc)) return {};
   // Map component name to directory (e.g. 'banner' → 'Banner', 'dropdownmenu' → 'DropdownMenu')
-  const dirs = fs.readdirSync(coreSrc, { withFileTypes: true })
+  const dirs = fs
+    .readdirSync(coreSrc, {withFileTypes: true})
     .filter(d => d.isDirectory())
     .map(d => d.name);
-  const dir = dirs.find(d => d.toLowerCase() === componentName.toLowerCase()
-    || d.toLowerCase().replace(/[^a-z]/g, '') === componentName.toLowerCase());
+  const dir = dirs.find(
+    d =>
+      d.toLowerCase() === componentName.toLowerCase() ||
+      d.toLowerCase().replace(/[^a-z]/g, '') === componentName.toLowerCase(),
+  );
   if (!dir) return {};
 
   const docPath = path.join(coreSrc, dir, `${dir}.doc.mjs`);
@@ -175,7 +210,9 @@ async function loadKnownValues(componentName) {
       // Parse union type: "'info' | 'warning' | 'error' | 'success'" → ['info', 'warning', 'error', 'success']
       const matches = prop.type.match(/'([^']+)'/g);
       if (matches) {
-        result[prop.name] = matches.map((/** @type {string} */ m) => m.replace(/'/g, ''));
+        result[prop.name] = matches.map((/** @type {string} */ m) =>
+          m.replace(/'/g, ''),
+        );
       }
     }
     return result;
@@ -316,15 +353,16 @@ async function generateVariantDeclarationsAsync(themeDef) {
         if (knownForProp && knownForProp.includes(value)) continue;
 
         if (!customValues[component]) customValues[component] = {};
-        if (!customValues[component][prop]) customValues[component][prop] = new Set();
+        if (!customValues[component][prop])
+          customValues[component][prop] = new Set();
         customValues[component][prop].add(value);
       }
     }
   }
 
   // Check if we found any custom values
-  const hasCustom = Object.values(customValues).some(
-    props => Object.values(props).some(values => values.size > 0)
+  const hasCustom = Object.values(customValues).some(props =>
+    Object.values(props).some(values => values.size > 0),
   );
   if (!hasCustom) return null;
 
@@ -382,7 +420,8 @@ function resolveTokenValue(value) {
 // Theme @scope selector helpers. Keep the `astryx` literal in sync with
 // packages/core/src/naming.ts (NAMESPACE) and generateThemeRules.ts.
 // Theme scopes to data-astryx-theme; the static build path must match.
-const themeScopeStart = (/** @type {string} */ name) => `[data-astryx-theme="${name}"]`;
+const themeScopeStart = (/** @type {string} */ name) =>
+  `[data-astryx-theme="${name}"]`;
 const THEME_SCOPE_TO = `[data-astryx-theme]`;
 
 /**
@@ -409,7 +448,7 @@ async function importThemeModule(filePath) {
 
   throw new Error(
     `Could not find a defineTheme() result in ${filePath}.\n` +
-    `Expected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })`,
+      `Expected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })`,
   );
 }
 
@@ -443,7 +482,7 @@ async function extractThemeDefinition(filePath) {
       const je = /** @type {Error} */ (jitiError);
       throw new Error(
         `Failed to load theme from ${filePath}: ${je.message}\n` +
-        `Make sure all imports in the theme file are resolvable.`,
+          `Make sure all imports in the theme file are resolvable.`,
       );
     }
   }
@@ -464,25 +503,27 @@ function extractThemeDefinitionLegacy(filePath) {
     if (!defaultMatch) {
       throw new Error(
         `Could not find defineTheme() call or default export in ${filePath}.\n` +
-        `Expected: defineTheme({ name: '...', tokens: {...} })`,
+          `Expected: defineTheme({ name: '...', tokens: {...} })`,
       );
     }
-     
+
     return eval(`(${defaultMatch[1]})`);
   }
 
   let objStr = defineMatch[1];
   objStr = objStr.replace(/\s+as\s+const/g, '');
-  objStr = objStr.replace(/icons:\s*[a-zA-Z_][a-zA-Z0-9_]*/g, 'icons: undefined');
+  objStr = objStr.replace(
+    /icons:\s*[a-zA-Z_][a-zA-Z0-9_]*/g,
+    'icons: undefined',
+  );
 
   try {
-     
     return eval(`(${objStr})`);
   } catch (e) {
     const err = /** @type {Error} */ (e);
     throw new Error(
       `Failed to parse theme definition in ${filePath}: ${err.message}\n` +
-      `Make sure the defineTheme() argument is a plain object literal.`,
+        `Make sure the defineTheme() argument is a plain object literal.`,
       {cause: e},
     );
   }
@@ -533,9 +574,7 @@ function generateBuiltModule(themeDef, iconInfo) {
     ? `import { ${iconInfo.exportName} } from '${iconInfo.importPath}';\n`
     : '';
   const iconsField = iconInfo ? `  icons: ${iconInfo.exportName},` : '';
-  const iconReExport = iconInfo
-    ? `\nexport { ${iconInfo.exportName} };\n`
-    : '';
+  const iconReExport = iconInfo ? `\nexport { ${iconInfo.exportName} };\n` : '';
 
   // Resolve token values — tuples become light-dark() strings
   /** @type {Record<string, unknown>} */
@@ -674,7 +713,7 @@ function validateComponentOverrides(themeDef) {
     // Check component name
     if (!(component in KNOWN_COMPONENTS)) {
       const similar = Object.keys(KNOWN_COMPONENTS)
-        .filter((k) => {
+        .filter(k => {
           if (k.includes(component) || component.includes(k)) return true;
           // Levenshtein distance 1-2 for short names
           if (Math.abs(k.length - component.length) <= 2) {
@@ -692,7 +731,8 @@ function validateComponentOverrides(themeDef) {
           return false;
         })
         .slice(0, 3);
-      const hint = similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : '';
+      const hint =
+        similar.length > 0 ? ` Did you mean: ${similar.join(', ')}?` : '';
       warnings.push(`Unknown component "${component}".${hint}`);
       continue;
     }
@@ -743,8 +783,8 @@ function validatePrivateVars(themeDef) {
         if (typeof prop === 'string' && prop.startsWith('--_')) {
           errors.push(
             `Component "${component}" (${key}) sets private var "${prop}". ` +
-            `Private vars (--_*) are internal — use standard CSS properties ` +
-            `(e.g. borderRadius, padding) instead. The pipeline expands them automatically.`,
+              `Private vars (--_*) are internal — use standard CSS properties ` +
+              `(e.g. borderRadius, padding) instead. The pipeline expands them automatically.`,
           );
         }
       }
@@ -762,15 +802,19 @@ function validatePrivateVars(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string}} [options] - `out` overrides the output CSS path.
+ * @param {{out?: string, check?: boolean}} [options] - `out` overrides the output CSS path; `check` compares against on-disk outputs instead of writing.
  * @param {{cwd?: string}} [ctx]
- * @returns {Promise<import('../theme.type.mjs').ThemeBuildResponse | null>}
+ * @returns {Promise<import('../theme.type.mjs').ThemeBuildResponse | import('../theme.type.mjs').ThemeBuildCheckResponse | null>}
  */
 export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {}) {
   const filePath = path.resolve(cwd, file);
 
   if (!fs.existsSync(filePath)) {
-    throw new AstryxError(`File not found: ${filePath}`, undefined, ERROR_CODES.ERR_FILE_NOT_FOUND);
+    throw new AstryxError(
+      `File not found: ${filePath}`,
+      undefined,
+      ERROR_CODES.ERR_FILE_NOT_FOUND,
+    );
   }
 
   logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
@@ -785,7 +829,11 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
   }
 
   if (!themeDef.name) {
-    throw new AstryxError('Theme must have a name property.', undefined, ERROR_CODES.ERR_THEME_INVALID);
+    throw new AstryxError(
+      'Theme must have a name property.',
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   }
 
   // Path-safety: the theme name is used to derive output filenames
@@ -796,7 +844,11 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
     sanitizeName(themeDef.name, {label: 'theme name'});
   } catch (err) {
     if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
+      throw new AstryxError(
+        err.message,
+        undefined,
+        ERROR_CODES.ERR_PATH_TRAVERSAL,
+      );
     }
     throw err;
   }
@@ -816,7 +868,9 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
     logger.error(`  ✗ ${e}`);
   }
   if (privateVarErrors.length > 0) {
-    logger.error(`\n  ${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`);
+    logger.error(
+      `\n  ${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
+    );
   }
 
   // Generate CSS via core's shared generator — the SINGLE source of truth.
@@ -829,7 +883,9 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
         'built, resolvable @astryxdesign/core so it emits the same CSS as the ' +
         'runtime <Theme>. Build @astryxdesign/core first (e.g. `pnpm -F @astryxdesign/core ' +
         'build`)' +
-        (_coreImportError ? `.\n  Import error: ${_coreImportError.message}` : '.'),
+        (_coreImportError
+          ? `.\n  Import error: ${_coreImportError.message}`
+          : '.'),
       undefined,
       ERROR_CODES.ERR_CORE_NOT_FOUND,
     );
@@ -905,8 +961,12 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
     : path.join(path.dirname(filePath), `${baseName}.css`);
 
   const displayTheme = resolvedTheme || themeDef;
-  const tokenCount = displayTheme.tokens ? Object.keys(displayTheme.tokens).length : 0;
-  const componentCount = displayTheme.components ? Object.keys(displayTheme.components).length : 0;
+  const tokenCount = displayTheme.tokens
+    ? Object.keys(displayTheme.tokens).length
+    : 0;
+  const componentCount = displayTheme.components
+    ? Object.keys(displayTheme.components).length
+    : 0;
   const size = (Buffer.byteLength(css) / 1024).toFixed(1);
 
   // Compute all output paths up front so we can validate them as a
@@ -923,7 +983,8 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
   // Type augmentation .d.ts if theme has custom prop values. Computed
   // before the main .d.ts so the latter can reference it (see below).
   const augmentationSource = resolvedTheme || themeDef;
-  const variantDecl = await generateVariantDeclarationsAsync(augmentationSource);
+  const variantDecl =
+    await generateVariantDeclarationsAsync(augmentationSource);
   const variantsFileName = variantDecl ? `${baseName}.variants.d.ts` : null;
   const variantDtsPath =
     variantDecl && variantsFileName
@@ -937,8 +998,12 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
   // the variants file (when present) via a triple-slash directive so
   // importing the theme also loads the custom-variant augmentations.
   const cssContent = generatedHeader(sourceRelative, 'css', buildCommand) + css;
-  const jsContent = generatedHeader(sourceRelative, 'js', buildCommand) + generateBuiltModule(resolvedTheme || themeDef, iconInfo);
-  const dtsContent = generatedHeader(sourceRelative, 'ts', buildCommand) + generateBuiltTypes(themeDef, iconInfo, variantsFileName);
+  const jsContent =
+    generatedHeader(sourceRelative, 'js', buildCommand) +
+    generateBuiltModule(resolvedTheme || themeDef, iconInfo);
+  const dtsContent =
+    generatedHeader(sourceRelative, 'ts', buildCommand) +
+    generateBuiltTypes(themeDef, iconInfo, variantsFileName);
 
   // Atomic-ish write: stage every file as `<dest>.tmp`, then rename
   // each into place. If any stage step fails we clean up partials and
@@ -951,6 +1016,49 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
   ];
   if (variantDtsPath && variantContent) {
     writes.push({dest: variantDtsPath, content: variantContent});
+  }
+
+  // Check mode: compare generated content against what's on disk instead of
+  // writing. A file is "stale" if it's missing or its content differs once the
+  // volatile @generated header lines (timestamp/command) are ignored. Returns a
+  // receipt listing stale/missing outputs so callers (CI) can fail on drift.
+  if (options.check) {
+    /** @type {Array<{path: string, reason: 'missing' | 'outdated'}>} */
+    const stale = [];
+    for (const w of writes) {
+      const rel = path.relative(cwd, w.dest);
+      if (!fs.existsSync(w.dest)) {
+        stale.push({path: rel, reason: 'missing'});
+        continue;
+      }
+      const onDisk = fs.readFileSync(w.dest, 'utf8');
+      if (normalizeForCompare(onDisk) !== normalizeForCompare(w.content)) {
+        stale.push({path: rel, reason: 'outdated'});
+      }
+    }
+    const upToDate = stale.length === 0;
+    if (upToDate) {
+      logger.log(`\n✓ Theme outputs are up to date with ${sourceRelative}.`);
+    } else {
+      logger.error(
+        `\n✗ ${stale.length} theme output(s) are out of date with ${sourceRelative}:`,
+      );
+      for (const s of stale) {
+        logger.error(
+          `  ${s.reason === 'missing' ? 'missing' : 'stale'}: ${s.path}`,
+        );
+      }
+      logger.error(`\n  Rebuild with: ${buildCommand}`);
+    }
+    return {
+      type: 'theme.build.check',
+      data: {
+        name: themeDef.name,
+        upToDate,
+        stale,
+        checked: writes.map(w => path.relative(cwd, w.dest)),
+      },
+    };
   }
 
   fs.mkdirSync(outDir, {recursive: true});
@@ -968,20 +1076,28 @@ export async function themeBuild(file, options = {}, {cwd = process.cwd()} = {})
   } catch (err) {
     // Roll back any temp files we managed to create.
     for (const s of staged) {
-      try { fs.rmSync(s.tmp, {force: true}); } catch { /* best-effort */ }
+      try {
+        fs.rmSync(s.tmp, {force: true});
+      } catch {
+        /* best-effort */
+      }
     }
     const msg = `Failed to write theme outputs: ${/** @type {Error} */ (err).message}`;
     throw new AstryxError(msg, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
   logger.log(`\n✓ ${path.relative(cwd, outPath)}`);
-  logger.log(`  ${tokenCount} token overrides, ${componentCount} component overrides`);
+  logger.log(
+    `  ${tokenCount} token overrides, ${componentCount} component overrides`,
+  );
   logger.log(`  ${size} KB`);
   logger.log(`✓ ${path.relative(cwd, jsPath)}`);
   logger.log(`✓ ${path.relative(cwd, dtsPath)}`);
   if (variantDtsPath && variantDecl) {
     const augCount = (variantDecl.match(/': true;/g) || []).length;
-    logger.log(`✓ ${path.relative(cwd, variantDtsPath)} (${augCount} type augmentations)`);
+    logger.log(
+      `✓ ${path.relative(cwd, variantDtsPath)} (${augCount} type augmentations)`,
+    );
   }
 
   const relOutDir = path.relative(cwd, outDir) || '.';
@@ -1011,7 +1127,9 @@ Or with a <link> tag:
 
   // Print font declaration warnings (derived from typography roles)
   if (resolvedTheme && resolvedTheme.fonts && resolvedTheme.fonts.length > 0) {
-    logger.log(`\n⚠ Theme "${themeDef.name}" requires fonts not included in the build:`);
+    logger.log(
+      `\n⚠ Theme "${themeDef.name}" requires fonts not included in the build:`,
+    );
     for (const font of resolvedTheme.fonts) {
       logger.log(`  ${font.family} — add to your document <head>:`);
       logger.log(`  <link rel="stylesheet" href="${font.url}" />`);
@@ -1030,7 +1148,9 @@ Or with a <link> tag:
         css: path.relative(cwd, outPath),
         js: path.relative(cwd, jsPath),
         dts: path.relative(cwd, dtsPath),
-        ...(variantDecl && variantDtsPath ? {variantsDts: path.relative(cwd, variantDtsPath)} : {}),
+        ...(variantDecl && variantDtsPath
+          ? {variantsDts: path.relative(cwd, variantDtsPath)}
+          : {}),
       },
       warnings: warningMessages,
     },
