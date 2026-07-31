@@ -3,6 +3,7 @@
   "version": 1,
   "generatedAt": null,
   "entries": [
+    "Icon::Inherit Color::color-contrast",
     "Thumbnail::Media Mode (dark vs light images)::color-contrast",
     "Thumbnail::Remove on hover::color-contrast"
   ]

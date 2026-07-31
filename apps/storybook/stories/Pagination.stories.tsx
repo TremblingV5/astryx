@@ -221,6 +221,7 @@ export const AllVariants: Story = {
           totalItems={100}
           pageSize={10}
           variant="pages"
+          label="Pages variant"
         />
       </div>
       <div>
@@ -230,15 +231,26 @@ export const AllVariants: Story = {
           totalItems={100}
           pageSize={10}
           variant="count"
+          label="Count variant"
         />
       </div>
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>compact</p>
-        <PaginationDemo page={3} totalPages={10} variant="compact" />
+        <PaginationDemo
+          page={3}
+          totalPages={10}
+          variant="compact"
+          label="Compact variant"
+        />
       </div>
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>dots</p>
-        <PaginationDemo page={3} totalPages={8} variant="dots" />
+        <PaginationDemo
+          page={3}
+          totalPages={8}
+          variant="dots"
+          label="Dots variant"
+        />
       </div>
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>input</p>
@@ -247,11 +259,17 @@ export const AllVariants: Story = {
           totalItems={100}
           pageSize={10}
           variant="input"
+          label="Input variant"
         />
       </div>
       <div>
         <p style={{marginBottom: 8, fontWeight: 500}}>none</p>
-        <PaginationDemo page={3} totalPages={10} variant="none" />
+        <PaginationDemo
+          page={3}
+          totalPages={10}
+          variant="none"
+          label="None variant"
+        />
       </div>
     </div>
   ),
