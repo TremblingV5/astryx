@@ -21,10 +21,15 @@ export const docs = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-selector', visualProps: ['size', 'status']},
+      {className: 'astryx-selector', visualProps: ['size', 'status'], states: ['disabled']},
       {className: 'astryx-selector-option'},
       {className: 'astryx-selector-clear-icon'},
       {className: 'astryx-selector-indicator-icon', states: ['state']},
+      {className: 'astryx-selector-dropdown'},
+      {className: 'astryx-selector-search'},
+      {className: 'astryx-selector-search-input'},
+      {className: 'astryx-selector-empty'},
+      {className: 'astryx-selector-section-header'},
     ],
   },
   description: 'Dropdown selector for choosing from a list of options.',

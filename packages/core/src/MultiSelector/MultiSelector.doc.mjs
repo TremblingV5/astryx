@@ -20,12 +20,17 @@ export const docs = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-multi-selector', visualProps: ['size', 'status']},
+      {className: 'astryx-multi-selector', visualProps: ['size', 'status'], states: ['disabled']},
       {className: 'astryx-multi-selector-clear-icon'},
       {
         className: 'astryx-multi-selector-indicator-icon',
         states: ['state'],
       },
+      {className: 'astryx-multi-selector-dropdown'},
+      {className: 'astryx-multi-selector-search'},
+      {className: 'astryx-multi-selector-search-input'},
+      {className: 'astryx-multi-selector-empty'},
+      {className: 'astryx-multi-selector-section-header'},
     ],
   },
   components: [
