@@ -1528,8 +1528,19 @@ describe('Selector indicator (chevron) icon theme target', () => {
       <Selector
         label="Fruit"
         options={[
-          {type: 'section', title: 'Citrus', options: ['Lemon', 'Lime']},
-          {type: 'section', title: 'Berries', options: ['Strawberry']},
+          {
+            type: 'section' as const,
+            title: 'Citrus',
+            options: [
+              {value: 'lemon', label: 'Lemon'},
+              {value: 'lime', label: 'Lime'},
+            ],
+          },
+          {
+            type: 'section' as const,
+            title: 'Berries',
+            options: [{value: 'strawberry', label: 'Strawberry'}],
+          },
         ]}
         onChange={() => {}}
       />,
