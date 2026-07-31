@@ -4,6 +4,7 @@
   "generatedAt": null,
   "entries": [
     "Thumbnail::Media Mode (dark vs light images)::color-contrast",
-    "Thumbnail::Remove on hover::color-contrast"
+    "Thumbnail::Remove on hover::color-contrast",
+    "Timestamp::Colors::color-contrast"
   ]
 }
