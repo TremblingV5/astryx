@@ -9,6 +9,7 @@
 export {ProgressBar} from './ProgressBar';
 export type {
   ProgressBarProps,
+  ProgressBarMarker,
   ProgressBarVariant,
   ProgressBarVariantMap,
 } from './ProgressBar';
