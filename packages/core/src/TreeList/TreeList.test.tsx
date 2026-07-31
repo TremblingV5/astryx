@@ -431,11 +431,11 @@ describe('TreeList', () => {
     });
 
     it("variant='noGuides' preserves per-level indentation on the rows", () => {
-      // Indentation lives on the row's margin-inline-start (not the guide
+      // Indentation lives on the row's padding-inline-start (not the guide
       // element), so it must survive when the connectors are suppressed. The
       // per-row distance is published as the `--_tree-indent` custom property
       // (not an inline longhand — see #4308), so the theme layer can override
-      // the `margin-inline-start` declaration. A deeper row is indented more
+      // the `padding-inline-start` declaration. A deeper row is indented more
       // than a shallower one.
       const {container} = render(
         <TreeList items={deepItems} variant="noGuides" />,
@@ -541,6 +541,55 @@ describe('TreeList', () => {
       };
       expect(indentOf('Mid')).toContain('var(--tree-list-indent)');
       expect(indentOf('Leaf')).toContain('var(--tree-list-indent)');
+    });
+  });
+
+  // ===========================================================================
+  // Full-width row surface
+  // ===========================================================================
+
+  describe('full-width row surface', () => {
+    // The indent is applied as inner padding, not an outer margin, so the row
+    // box spans the tree's full width at every depth — making astryx-tree-list-item
+    // a full-bleed surface a theme can paint, with the built-in highlight
+    // reaching edge to edge. jsdom can't resolve the @layer cascade, so we
+    // assert the mechanism: the row's inline style carries --_tree-indent, and
+    // the stylesheet applies it via padding-inline-start (not margin).
+    const rowOf = (text: string): HTMLElement => {
+      const li = screen.getByText(text).closest('li')!;
+      return li.querySelector<HTMLElement>('[style*="--_tree-indent"]')!;
+    };
+
+    it('does not put the per-level indent on the row margin', () => {
+      render(<TreeList items={deepItems} variant="noGuides" />);
+      const style = rowOf('Leaf').getAttribute('style') ?? '';
+      // The indent distance is published as a custom prop, consumed by
+      // padding-inline-start in the stylesheet — never an inline margin.
+      expect(style).toContain('--_tree-indent');
+      expect(style).not.toMatch(/margin-inline-start|margin-left/);
+    });
+
+    it('starts a leaf and a parent at the same level from the same box edge', () => {
+      // Both top-level rows are level 0. With the indent as padding on a
+      // full-width box, neither row is inset by an outer margin — a leaf is no
+      // longer pushed past its parent sibling by the chevron column.
+      const mixed: TreeListItemData[] = [
+        {
+          id: 'parent',
+          label: 'Parent',
+          isExpanded: true,
+          children: [{id: 'child', label: 'Child'}],
+        },
+        {id: 'leaf', label: 'Leaf Sibling'},
+      ];
+      render(<TreeList items={mixed} variant="noGuides" />);
+      const marginOf = (text: string): string =>
+        rowOf(text).getAttribute('style') ?? '';
+      // Neither carries an inline start margin — both boxes begin at the edge.
+      expect(marginOf('Parent')).not.toMatch(/margin-inline-start|margin-left/);
+      expect(marginOf('Leaf Sibling')).not.toMatch(
+        /margin-inline-start|margin-left/,
+      );
     });
   });
 

@@ -82,6 +82,7 @@ export const docs = {
     bestPractices: [
       {guidance: true, description: 'Provide meaningful labels and icons for each node to make the hierarchy easy to scan.'},
       {guidance: true, description: 'Pre-expand important branches so users see key content immediately.'},
+      {guidance: true, description: 'Rows span the full tree width, so a theme can paint the whole row — style the `tree-list-item` target (background, hover, selected) in defineTheme for a file-explorer-style full-width highlight.'},
       {guidance: false, description: 'Nest more than 4–5 levels deep; flatten the structure or use a different pattern.'},
       {guidance: false, description: 'Use a tree for flat, non-hierarchical data; use a List instead.'},
     ],
