@@ -8,7 +8,7 @@
  *   Reads i18n direction via useDirection() to flip the prev/next/first/last chevrons under RTL.
  *   The input variant uses the chevronsLeft/chevronsRight (first/last) icons.
  * @output Exports Pagination component, PaginationProps, PaginationVariant,
- *   PaginationNavigateBy, PaginationSize types
+ *   PaginationValueUnit, PaginationState, PaginationSize types
  * @position Core implementation; consumed by index.ts, tested by Pagination.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -18,11 +18,12 @@
  * - /packages/cli/templates/blocks/components/Pagination/ (showcase blocks)
  *
  * Last synced props: page, onChange, changeAction, totalItems, totalPages, hasMore,
- *   pageSize, pageSizeOptions, onPageSizeChange, variant, navigateBy, onRowNavigate,
- *   hasFirstLast, siblingCount, size, isDisabled, label, data-testid, xstyle
+ *   pageSize, pageSizeOptions, onPageSizeChange, variant, valueUnit, formatLabel,
+ *   onRowNavigate, hasFirstLast, siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
 import {useOptimistic, useState, useTransition} from 'react';
+import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   borderVars,
@@ -80,13 +81,36 @@ export interface PaginationVariantMap {
 export type PaginationVariant = keyof PaginationVariantMap;
 
 /**
- * What the editable input in the `input` variant navigates by.
- * - page: the input is a 1-based page number (default); renders "Page [ n ] / N".
- * - row: the input is a 1-based row index; renders "Row [ n ]" (no total) and,
- *   on commit, navigates to the page that contains that row (computed from
- *   pageSize) and reports the row via onRowNavigate.
+ * What the editable input's number *means* in the `input` variant. This drives
+ * navigation semantics only — the visible wording is controlled by
+ * `formatLabel`.
+ * - page: the value is a 1-based page number (default).
+ * - row: the value is a 1-based row index; committing it navigates to the page
+ *   that contains that row (computed from pageSize) and reports the row via
+ *   onRowNavigate. Requires totalItems to resolve rows to pages.
  */
-export type PaginationNavigateBy = 'page' | 'row';
+export type PaginationValueUnit = 'page' | 'row';
+
+/**
+ * Snapshot of pagination state passed to `formatLabel` in the `input` variant,
+ * alongside the pre-wired editable input node. Everything a consumer needs to
+ * word the label however they like — "Page [n] / N", "n–m of T rows", a
+ * localized/RTL ordering, or a bare box.
+ */
+export interface PaginationState {
+  /** Current 1-based page. */
+  page: number;
+  /** Total page count, or null when unknown (cursor/hasMore pagination). */
+  pageCount: number | null;
+  /** 1-based index of the first row on the current page. */
+  rowStart: number;
+  /** 1-based index of the last row on the current page (clamped to totalItems). */
+  rowEnd: number;
+  /** Total item count, or null when unknown. */
+  totalItems: number | null;
+  /** Items per page. */
+  pageSize: number;
+}
 
 /** Size of the pagination controls. */
 export type PaginationSize = 'sm' | 'md';
@@ -139,27 +163,35 @@ export interface PaginationProps extends Omit<
    * - count: "X–Y of Z" text
    * - compact: "Page X of Y" text
    * - dots: Dot indicators
-   * - input: An editable number box with a leading label. Page mode renders
-   *   "Page [ n ] / N"; row mode renders "Row [ n ]" (no total). First/last
-   *   double-chevron buttons flank prev/next by default (see hasFirstLast).
+   * - input: An editable number box. By default renders "Page [ n ] / N"
+   *   (page unit) or "Row [ n ]" (row unit); pass `formatLabel` to control the
+   *   wording. First/last double-chevron buttons flank prev/next by default
+   *   (see hasFirstLast).
    * - none: Just prev/next buttons
    * @default 'pages'
    */
   variant?: PaginationVariant;
   /**
-   * What the editable box navigates by in the `input` variant.
-   * - page: the box holds a 1-based page number (default), rendered as
-   *   "Page [ n ] / N".
-   * - row: the box holds a 1-based row index, rendered as "Row [ n ]" (no
-   *   total); committing it navigates to the page containing that row
-   *   (computed from pageSize) and fires onRowNavigate.
-   * Requires totalItems in `'row'` mode to resolve rows to pages.
+   * What the editable box's number means in the `input` variant.
+   * - page: the box holds a 1-based page number (default).
+   * - row: the box holds a 1-based row index; committing it navigates to the
+   *   page containing that row (computed from pageSize) and fires
+   *   onRowNavigate. Requires totalItems in `'row'` mode to resolve rows to
+   *   pages.
    * @default 'page'
    */
-  navigateBy?: PaginationNavigateBy;
+  valueUnit?: PaginationValueUnit;
   /**
-   * Called with the committed 1-based row index when the `input` variant is in
-   * `navigateBy='row'` mode. Fires alongside onChange (which moves to the page
+   * Customize the `input` variant's label wording. Receives the current
+   * pagination `state` and the pre-wired editable `input` node, and returns the
+   * full label layout — e.g. `"Page [n] / N"`, `"n–m of T rows"`, a localized
+   * ordering, or a bare box. The default reproduces "Page [ n ] / N" (page
+   * unit) and "Row [ n ]" (row unit), so most consumers never set this.
+   */
+  formatLabel?: (state: PaginationState, input: ReactNode) => ReactNode;
+  /**
+   * Called with the committed 1-based row index when the `input` variant uses
+   * `valueUnit='row'`. Fires alongside onChange (which moves to the page
    * containing that row). No-op in page mode.
    */
   onRowNavigate?: (row: number) => void;
@@ -449,7 +481,8 @@ export function Pagination({
   pageSizeOptions,
   onPageSizeChange,
   variant = 'pages',
-  navigateBy = 'page',
+  valueUnit = 'page',
+  formatLabel,
   onRowNavigate,
   hasFirstLast = true,
   siblingCount = 1,
@@ -484,7 +517,7 @@ export function Pagination({
   const itemsPerPageLabel = t('@astryx.pagination.itemsPerPage');
   const goToPageLabel = t('@astryx.pagination.goToPageInput');
   const inputLabelText =
-    navigateBy === 'row'
+    valueUnit === 'row'
       ? t('@astryx.pagination.rowLabel')
       : t('@astryx.pagination.pageLabel');
 
@@ -631,7 +664,7 @@ export function Pagination({
   // row of the current page in row mode. Committed value only — the pending
   // string shadows this while typing.
   const inputCommittedValue =
-    navigateBy === 'row' ? (optimisticPage - 1) * pageSize + 1 : optimisticPage;
+    valueUnit === 'row' ? (optimisticPage - 1) * pageSize + 1 : optimisticPage;
 
   // Parse + clamp a committed input to a 1-based row. Returns null when the
   // value is invalid (revert on commit). Page mode clamps to 1..totalPages;
@@ -646,7 +679,7 @@ export function Pagination({
     if (!Number.isInteger(parsed) || parsed < 1) {
       return null;
     }
-    if (navigateBy === 'row') {
+    if (valueUnit === 'row') {
       return totalItems != null ? Math.min(parsed, totalItems) : null;
     }
     return computedTotalPages != null
@@ -668,11 +701,11 @@ export function Pagination({
     }
     const committed = isDisabled ? null : parseCommittedInput(pendingInput);
     if (committed !== null) {
-      if (navigateBy === 'row') {
+      if (valueUnit === 'row') {
         onRowNavigate?.(committed);
       }
       const targetPage =
-        navigateBy === 'row' ? pageForRow(committed) : committed;
+        valueUnit === 'row' ? pageForRow(committed) : committed;
       if (targetPage !== optimisticPage) {
         handlePageChange(targetPage);
       }
@@ -836,8 +869,46 @@ export function Pagination({
       }
 
       case 'input': {
-        return (
-          <span {...stylex.props(styles.inputGroup)}>
+        // The pre-wired editable box: consumers that pass `formatLabel` drop
+        // this straight into whatever wording they want, without re-deriving
+        // the value/commit plumbing.
+        const inputNode = (
+          <input
+            type="text"
+            inputMode="numeric"
+            aria-label={goToPageLabel}
+            value={pendingInput ?? String(inputCommittedValue)}
+            onChange={handleInputChange}
+            onKeyDown={handleInputKeyDown}
+            onBlur={commitInput}
+            disabled={isDisabled}
+            data-testid={testId != null ? `${testId}-input` : undefined}
+            {...mergeProps(
+              themeProps('pagination-input', {size}),
+              stylex.props(
+                styles.input,
+                isSm && styles.inputSm,
+                isDisabled && styles.inputDisabled,
+              ),
+            )}
+          />
+        );
+
+        const paginationState: PaginationState = {
+          page: optimisticPage,
+          pageCount: computedTotalPages ?? null,
+          rowStart: rangeStart,
+          rowEnd: rangeEnd,
+          totalItems: totalItems ?? null,
+          pageSize,
+        };
+
+        // Default label wording: "Page [ n ] / N" (page unit) or "Row [ n ]"
+        // (row unit). A consumer-provided `formatLabel` replaces this entirely.
+        const labelContent = formatLabel ? (
+          formatLabel(paginationState, inputNode)
+        ) : (
+          <>
             <span
               aria-hidden="true"
               {...mergeProps(
@@ -846,26 +917,8 @@ export function Pagination({
               )}>
               {inputLabelText}
             </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              aria-label={goToPageLabel}
-              value={pendingInput ?? String(inputCommittedValue)}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              onBlur={commitInput}
-              disabled={isDisabled}
-              data-testid={testId != null ? `${testId}-input` : undefined}
-              {...mergeProps(
-                themeProps('pagination-input', {size}),
-                stylex.props(
-                  styles.input,
-                  isSm && styles.inputSm,
-                  isDisabled && styles.inputDisabled,
-                ),
-              )}
-            />
-            {navigateBy === 'page' && computedTotalPages != null && (
+            {inputNode}
+            {valueUnit === 'page' && computedTotalPages != null && (
               <span
                 {...mergeProps(
                   themeProps('pagination-input-total', {size}),
@@ -876,8 +929,10 @@ export function Pagination({
                 })}
               </span>
             )}
-          </span>
+          </>
         );
+
+        return <span {...stylex.props(styles.inputGroup)}>{labelContent}</span>;
       }
 
       case 'none':

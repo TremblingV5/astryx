@@ -70,17 +70,23 @@ export const docs = {
       default: "'pages'",
     },
     {
-      name: 'navigateBy',
+      name: 'valueUnit',
       type: "'page' | 'row'",
       description:
-        "What the editable box navigates by in the 'input' variant. 'page' renders 'Page [ n ] / N' and treats the value as a 1-based page number; 'row' renders 'Row [ n ]' (no total), treats the value as a 1-based row index, jumps to the page containing that row (computed from pageSize), and fires onRowNavigate. Row mode needs totalItems.",
+        "What the editable box's number means in the 'input' variant. 'page' treats the value as a 1-based page number; 'row' treats it as a 1-based row index, jumps to the page containing that row (computed from pageSize), and fires onRowNavigate. Row mode needs totalItems. The visible wording is controlled by formatLabel.",
       default: "'page'",
+    },
+    {
+      name: 'formatLabel',
+      type: '(state: PaginationState, input: ReactNode) => ReactNode',
+      description:
+        "Customize the 'input' variant's label wording. Receives the pagination state (page, pageCount, rowStart, rowEnd, totalItems, pageSize) and the pre-wired editable input node; returns the full label layout. Defaults to 'Page [ n ] / N' (page unit) or 'Row [ n ]' (row unit).",
     },
     {
       name: 'onRowNavigate',
       type: '(row: number) => void',
       description:
-        "Called with the committed 1-based row index when the 'input' variant is in navigateBy='row' mode. Fires alongside onChange. No-op in page mode.",
+        "Called with the committed 1-based row index when the 'input' variant uses valueUnit='row'. Fires alongside onChange. No-op in page mode.",
     },
     {
       name: 'hasFirstLast',
@@ -221,17 +227,23 @@ export const docsZh = {
       default: "'pages'",
     },
     {
-      name: 'navigateBy',
+      name: 'valueUnit',
       type: "'page' | 'row'",
       description:
-        "'input' 变体中可编辑框按什么导航。'page' 渲染 'Page [ n ] / N' 并将值视为从 1 开始的页码；'row' 渲染 'Row [ n ]'（无总数），将其视为从 1 开始的行索引，跳转到包含该行的页（根据 pageSize 计算），并触发 onRowNavigate。行模式需要 totalItems。",
+        "'input' 变体中可编辑框数字的含义。'page' 将值视为从 1 开始的页码；'row' 将其视为从 1 开始的行索引，跳转到包含该行的页（根据 pageSize 计算），并触发 onRowNavigate。行模式需要 totalItems。可见文案由 formatLabel 控制。",
       default: "'page'",
+    },
+    {
+      name: 'formatLabel',
+      type: '(state: PaginationState, input: ReactNode) => ReactNode',
+      description:
+        "自定义 'input' 变体的标签文案。接收分页状态（page、pageCount、rowStart、rowEnd、totalItems、pageSize）和预连接的可编辑输入框节点，返回完整的标签布局。默认为 'Page [ n ] / N'（页单位）或 'Row [ n ]'（行单位）。",
     },
     {
       name: 'onRowNavigate',
       type: '(row: number) => void',
       description:
-        "当 'input' 变体处于 navigateBy='row' 模式时，以提交的从 1 开始的行索引调用。与 onChange 一起触发。页模式下无操作。",
+        "当 'input' 变体使用 valueUnit='row' 时，以提交的从 1 开始的行索引调用。与 onChange 一起触发。页模式下无操作。",
     },
     {
       name: 'hasFirstLast',
@@ -327,8 +339,9 @@ export const docsDense = {
     pageSizeOptions: 'Page size options. Shows selector dropdown when provided.',
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
     variant: "Display between prev/next. 'input' = 'Page [n] / N' (page) or 'Row [n]' (row) + first/last.",
-    navigateBy: "'input' box navigates by 'page' (shows / N) or 'row' (no total). Row mode needs totalItems.",
-    onRowNavigate: "Committed 1-based row index in navigateBy='row'. Fires with onChange.",
+    valueUnit: "'input' box value means 'page' or 'row' (jumps to its page + fires onRowNavigate). Row needs totalItems.",
+    formatLabel: "Customize 'input' label wording; gets (state, input node), returns layout. Default 'Page [n] / N' or 'Row [n]'.",
+    onRowNavigate: "Committed 1-based row index when valueUnit='row'. Fires with onChange.",
     hasFirstLast: "Show first/last («/») buttons in the 'input' variant. Omitted when total unknown.",
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',

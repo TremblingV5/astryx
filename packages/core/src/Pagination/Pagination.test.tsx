@@ -810,7 +810,7 @@ describe('Pagination', () => {
     // Row mode
     // -------------------------------------------------------------------------
 
-    describe('navigateBy="row"', () => {
+    describe('valueUnit="row"', () => {
       it('renders "Row [ n ]" with NO "/ N" total', () => {
         render(
           <Pagination
@@ -819,7 +819,7 @@ describe('Pagination', () => {
             totalItems={100}
             pageSize={10}
             variant="input"
-            navigateBy="row"
+            valueUnit="row"
           />,
         );
         // Visible "Row" label, no "Page" label, no "/ N" total.
@@ -843,7 +843,7 @@ describe('Pagination', () => {
             totalItems={100}
             pageSize={10}
             variant="input"
-            navigateBy="row"
+            valueUnit="row"
             onRowNavigate={onRowNavigate}
           />,
         );
@@ -866,7 +866,7 @@ describe('Pagination', () => {
             totalItems={100}
             pageSize={10}
             variant="input"
-            navigateBy="row"
+            valueUnit="row"
             onRowNavigate={onRowNavigate}
           />,
         );
@@ -876,6 +876,55 @@ describe('Pagination', () => {
         // Clamped to row 100 → page 10.
         expect(onRowNavigate).toHaveBeenCalledWith(100);
         expect(onChange).toHaveBeenCalledWith(10);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Custom label via formatLabel
+    // -------------------------------------------------------------------------
+
+    describe('formatLabel', () => {
+      it('renders custom wording from the pagination state and input node', () => {
+        render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={200}
+            pageSize={20}
+            variant="input"
+            formatLabel={(state, input) => (
+              <>
+                {input} of {state.pageCount} ({state.rowStart}–{state.rowEnd} of{' '}
+                {state.totalItems})
+              </>
+            )}
+          />,
+        );
+        // Default "Page"/"/ N" wording is replaced entirely.
+        expect(screen.queryByText('Page')).not.toBeInTheDocument();
+        // Page 3 of 10 pages, rows 41–60 of 200.
+        expect(screen.getByText(/of 10 \(41–60 of 200\)/)).toBeInTheDocument();
+        expect(screen.getByRole('textbox', {name: 'Go to page'})).toHaveValue(
+          '3',
+        );
+      });
+
+      it('keeps the pre-wired input functional (commits a page)', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        render(
+          <Pagination
+            page={1}
+            onChange={onChange}
+            totalPages={10}
+            variant="input"
+            formatLabel={(_state, input) => <>Jump: {input}</>}
+          />,
+        );
+        const box = screen.getByRole('textbox', {name: 'Go to page'});
+        await user.clear(box);
+        await user.type(box, '5{Enter}');
+        expect(onChange).toHaveBeenCalledWith(5);
       });
     });
   });

@@ -14,6 +14,7 @@ export type {
   PaginationProps,
   PaginationVariant,
   PaginationVariantMap,
-  PaginationNavigateBy,
+  PaginationValueUnit,
+  PaginationState,
   PaginationSize,
 } from './Pagination';

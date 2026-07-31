@@ -19,10 +19,10 @@ const meta: Meta<typeof Pagination> = {
       options: ['pages', 'count', 'compact', 'dots', 'input', 'none'],
       description: 'Visual variant',
     },
-    navigateBy: {
+    valueUnit: {
       control: 'select',
       options: ['page', 'row'],
-      description: "input variant: navigate by 'page' or 'row'",
+      description: "input variant: value means 'page' or 'row'",
     },
     hasFirstLast: {
       control: 'boolean',
@@ -125,7 +125,7 @@ export const InputVariantRowMode: Story = {
       totalItems={200}
       pageSize={10}
       variant="input"
-      navigateBy="row"
+      valueUnit="row"
       onRowNavigate={row => console.log('navigate to row', row)}
     />
   ),
@@ -141,6 +141,25 @@ export const InputVariantNoFirstLast: Story = {
       pageSize={10}
       variant="input"
       hasFirstLast={false}
+    />
+  ),
+};
+
+export const InputVariantCustomLabel: Story = {
+  name: 'Variant: Input (custom formatLabel)',
+  render: () => (
+    // formatLabel rewords the box using pagination state — here a row range.
+    <PaginationDemo
+      page={3}
+      totalItems={200}
+      pageSize={20}
+      variant="input"
+      formatLabel={(state, input) => (
+        <>
+          {input} / {state.pageCount} · rows {state.rowStart}–{state.rowEnd} of{' '}
+          {state.totalItems}
+        </>
+      )}
     />
   ),
 };
