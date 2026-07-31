@@ -51,10 +51,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function getSheet(): HTMLElement {
+  const sheet = document.querySelector<HTMLElement>('.astryx-bottom-sheet');
+  if (!sheet) {
+    throw new Error('sheet panel not found');
+  }
+  return sheet;
+}
+
+// The grab handle is the panel's first child (decorative, aria-hidden).
 function getHandle(): HTMLElement {
-  const handle = document.querySelector<HTMLElement>(
-    '[data-astryx-sheet-handle]',
-  );
+  const handle = getSheet().querySelector<HTMLElement>('[aria-hidden="true"]');
   if (!handle) {
     throw new Error('grab handle not found');
   }
@@ -156,7 +163,23 @@ describe('BottomSheet', () => {
 
   describe('height', () => {
     it('renders for each named height without error', () => {
-      for (const height of ['short', 'medium', 'tall', 'auto'] as const) {
+      for (const height of ['hug', 'capped', 'tall'] as const) {
+        const {unmount} = render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            height={height}>
+            Content
+          </BottomSheet>,
+        );
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        unmount();
+      }
+    });
+
+    it('accepts a freeform height (number or CSS length)', () => {
+      for (const height of [480, '70dvh'] as const) {
         const {unmount} = render(
           <BottomSheet
             isOpen
@@ -204,6 +227,47 @@ describe('BottomSheet', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('initial focus', () => {
+    it('focuses the sheet panel on open, not the first control', () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          <button type="button">First action</button>
+        </BottomSheet>,
+      );
+      const panel = getSheet();
+      expect(document.activeElement).toBe(panel);
+      expect(document.activeElement).not.toBe(
+        screen.getByRole('button', {name: 'First action'}),
+      );
+    });
+
+    it('honors a descendant with data-autofocus', () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          <input data-autofocus aria-label="Search" />
+        </BottomSheet>,
+      );
+      expect(document.activeElement).toBe(
+        screen.getByRole('textbox', {name: 'Search'}),
+      );
+    });
+  });
+
+  describe('accessible name', () => {
+    it('warns in development when label is empty', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="">
+          Content
+        </BottomSheet>,
+      );
+      expect(
+        warn.mock.calls.some(args => String(args[0]).includes('BottomSheet')),
+      ).toBe(true);
+      warn.mockRestore();
     });
   });
 
