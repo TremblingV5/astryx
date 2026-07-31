@@ -201,7 +201,7 @@ describe('themeBuild() — check mode', () => {
     ).toBe(true);
   });
 
-  it('ignores volatile @generated header lines (a differing timestamp is NOT stale)', async () => {
+  it('ignores the volatile @generated Command line (a differing command is NOT stale)', async () => {
     const themeFile = path.join(tmpDir, 'stamp.mjs');
     fs.writeFileSync(
       themeFile,
@@ -209,16 +209,30 @@ describe('themeBuild() — check mode', () => {
     );
     await themeBuild('stamp.mjs', {}, {cwd: tmpDir});
 
-    // Rewrite ONLY the Generated: timestamp line in the committed CSS.
+    // Rewrite ONLY the Command: line in the committed CSS.
     const cssPath = path.join(tmpDir, 'stamp.css');
     const tampered = fs
       .readFileSync(cssPath, 'utf8')
-      .replace(/Generated: .*/, 'Generated: 1999-01-01T00:00:00.000Z');
+      .replace(/Command: .*/, 'Command: astryx theme build somewhere/else.mjs');
     fs.writeFileSync(cssPath, tampered);
 
     const result = await themeBuild('stamp.mjs', {check: true}, {cwd: tmpDir});
 
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
+  });
+
+  it('records stable CLI/Core versions in the @generated header (no timestamp)', async () => {
+    const themeFile = path.join(tmpDir, 'ver.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'ver', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('ver.mjs', {}, {cwd: tmpDir});
+
+    const css = fs.readFileSync(path.join(tmpDir, 'ver.css'), 'utf8');
+    expect(css).toMatch(/CLI: @astryxdesign\/cli@/);
+    expect(css).toMatch(/Core: @astryxdesign\/core@/);
+    expect(css).not.toMatch(/Generated:/);
   });
 });
