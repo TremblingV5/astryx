@@ -7,6 +7,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Code} from '@astryxdesign/core/CodeBlock';
 
 const TOKEN = /(`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
+const CODE_SPAN = /`([^`]+)`/g;
 
 const styles = stylex.create({
   link: {
@@ -29,6 +30,31 @@ const styles = stylex.create({
   },
 });
 
+// Render the label of a markdown link, expanding any `code` spans into
+// <Code> components so that [`code`](href) renders as monospace text.
+function renderLinkLabel(label: string, baseKey: number): ReactNode {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  let i = 0;
+  CODE_SPAN.lastIndex = 0;
+  while ((match = CODE_SPAN.exec(label)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(label.slice(lastIndex, match.index));
+    }
+    parts.push(<Code key={`${baseKey}-code-${i++}`}>{match[1]}</Code>);
+    lastIndex = match.index + match[0].length;
+  }
+  if (parts.length === 0) {
+    // No code spans found; render the label as plain text.
+    return label;
+  }
+  if (lastIndex < label.length) {
+    parts.push(label.slice(lastIndex));
+  }
+  return parts;
+}
+
 function renderLink(label: string, href: string, key: number): ReactNode {
   const isExternal = /^https?:\/\//.test(href);
   return (
@@ -38,7 +64,7 @@ function renderLink(label: string, href: string, key: number): ReactNode {
       rel={isExternal ? 'noreferrer' : undefined}
       target={isExternal ? '_blank' : undefined}
       {...stylex.props(styles.link)}>
-      {label}
+      {renderLinkLabel(label, key)}
     </a>
   );
 }
@@ -48,6 +74,7 @@ export function renderInlineMarkdown(text: string) {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match;
+  TOKEN.lastIndex = 0;
   while ((match = TOKEN.exec(text)) !== null) {
     if (match.index > lastIndex) {
       nodes.push(text.slice(lastIndex, match.index));
